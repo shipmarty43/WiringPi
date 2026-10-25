@@ -4,6 +4,17 @@ CC = gcc
 CFLAGS = -Wall
 LDFLAGS =
 
+# Portable regression tests with fake open/ioctl/close; never access GPIO.
+# Keep separate from the hardware test targets and their wiring requirements.
+HOST_TEST_SANITIZERS ?= -fsanitize=address,undefined -fno-sanitize-recover=all
+.PHONY: host-test
+host-test:
+	@set -eu; tmpdir=$$(mktemp -d); trap 'rm -rf "$$tmpdir"' EXIT; \
+	$(CC) -g -Wall -Wextra -Werror $(HOST_TEST_SANITIZERS) -I.. \
+	  -Dopen=wpi_test_open -Dclose=wpi_test_close -Dioctl=wpi_test_ioctl \
+	  ../wiringPiSPI.c wiringpi_test_spi_host.c -o "$$tmpdir/spi-test"; \
+	"$$tmpdir/spi-test"
+
 pwmtests = wiringpi_test0_version wiringpi_test8_pwm wiringpi_test81_pwm
 
 # Need BCM19 <-> BCM26, +PWM: BCM12 <-> BCM13, BCM18 <-> BCM17 connected (1kOhm)

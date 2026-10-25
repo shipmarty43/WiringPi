@@ -47,32 +47,21 @@ static const uint16_t    spiDelay = 0 ;
 //https://datasheets.raspberrypi.com/cm4/cm4-datasheet.pdf   SPI0-6, CS0-2
 //cm5-datasheet.pdf                                          SPI0-5, CS depend on SPInumber, can be up to 4
 //spi0-4cs.dts                                               extention for supporting CS0-4
-const uint8_t     WPI_MaxSPINumbers   = 7 ;
-const uint8_t     WPI_MaxSPIChannels  = 5 ;
+enum { SPI_NUMBERS = 7, SPI_CHANNELS = 5 };
+const uint8_t WPI_MaxSPINumbers = SPI_NUMBERS;
+const uint8_t WPI_MaxSPIChannels = SPI_CHANNELS;
 
-
-static uint32_t    spiSpeeds [7][3] =
+static uint32_t spiSpeeds[SPI_NUMBERS][SPI_CHANNELS] = {{0}};
+static int spiFds[SPI_NUMBERS][SPI_CHANNELS] =
 {
- {0, 0, 0},
- {0, 0, 0},
- {0, 0, 0},
- {0, 0, 0},
- {0, 0, 0},
- {0, 0, 0},
- {0, 0, 0},
+ {-1, -1, -1, -1, -1},
+ {-1, -1, -1, -1, -1},
+ {-1, -1, -1, -1, -1},
+ {-1, -1, -1, -1, -1},
+ {-1, -1, -1, -1, -1},
+ {-1, -1, -1, -1, -1},
+ {-1, -1, -1, -1, -1},
 };
-
-static int         spiFds [7][3] =
-{
- {-1, -1, -1},
- {-1, -1, -1},
- {-1, -1, -1},
- {-1, -1, -1},
- {-1, -1, -1},
- {-1, -1, -1},
- {-1, -1, -1},
-};
-
 
 int SPICheckLimits(const int number, const int channel) {
   if (channel<0 || channel>=WPI_MaxSPIChannels) {
@@ -210,7 +199,7 @@ int wiringPiSPISetup (int channel, int speed) {
 int wiringPiSPIxClose (const int number, const int channel) {
 
   RETURN_ON_LIMIT_FAIL
-  if (spiFds[number][channel]>0) {
+  if (spiFds[number][channel]>=0) {
     ret = close(spiFds[number][channel]);
   }
   spiSpeeds [number][channel] = 0 ;
