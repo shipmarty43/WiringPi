@@ -91,7 +91,7 @@ static PI_THREAD (softToneThread)
 
 void softToneWrite (int pin, int freq)
 {
-  if (h618Detected()) { h618Unsupported(__func__); return; }
+  if (h618Detected()) { if (h618WaveWrite(h618CurrentPin(pin), freq, 1) < 0) perror("softToneWrite"); return; }
   pin &= 63 ;
 
   if      (freq < 0)
@@ -111,7 +111,7 @@ void softToneWrite (int pin, int freq)
 
 int softToneCreate (int pin)
 {
-  if (h618Detected()) { h618Unsupported(__func__); return -1; }
+  if (h618Detected()) return h618WaveStart(h618CurrentPin(pin), 0, 0, 1);
   int res ;
   pthread_t myThread ;
 
@@ -143,7 +143,7 @@ int softToneCreate (int pin)
 
 void softToneStop (int pin)
 {
-  if (h618Detected()) { h618Unsupported(__func__); return; }
+  if (h618Detected()) { if (h618WorkerStop(h618CurrentPin(pin), 3) < 0) perror("softToneStop"); return; }
   if (threads [pin] != 0)
   {
     pthread_cancel (threads [pin]) ;

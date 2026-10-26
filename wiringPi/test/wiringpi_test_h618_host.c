@@ -131,7 +131,7 @@ int main(void) {
   assert(wiringPiSetupSys() == 0 && digitalRead(264) == 1);
   pinMode(264, PM_OFF);
   errno = 0; pwmWrite(264, 12); assert(errno == ENOTSUP);
-  assert(wiringPiISR(264, INT_EDGE_BOTH, NULL) == -1 && errno == ENOTSUP);
+  assert(wiringPiISR(264, INT_EDGE_SETUP, NULL) == -1 && errno == EINVAL);
   assert(wiringPiGlobalMemoryAccess() == 0);
   int before = requests;
   char *args[] = {"gpio", "readall"};

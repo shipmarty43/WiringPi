@@ -690,6 +690,8 @@ int piRP1Model() {
 }
 
 
+int h618CurrentPin(int pin) { return h618Map(pin, wiringPiMode); }
+
 int GetMaxPin() {
   if (h618Detected()) return wiringPiMode == WPI_MODE_GPIO ? 272 : (wiringPiMode == WPI_MODE_PHYS ? 40 : 27);
   if (piRP1Model()) {
@@ -2223,7 +2225,13 @@ void pinModeDevice (int pin, int mode) {
 void pinMode (int pin, int mode)
 {
   if (h618Detected() && !wiringPiFindNode(pin)) {
-    if (h618PinMode(h618Map(pin, wiringPiMode), mode) < 0) perror("wiringPi: pinMode");
+    int native=h618CurrentPin(pin), ret;
+    if (native < 0) { perror("wiringPi: pinMode"); return; }
+    if (mode == SOFT_PWM_OUTPUT) ret=h618WaveStart(native, 0, 100, 0);
+    else if (mode == SOFT_TONE_OUTPUT) ret=h618WaveStart(native, 0, 0, 1);
+    else if (mode == PM_OFF && h618WorkerStop(native, 0) < 0) ret=-1;
+    else ret=h618PinMode(native, mode);
+    if (ret < 0) perror("wiringPi: pinMode");
     return;
   }
   int    fSel, shift, alt ;
@@ -2902,7 +2910,7 @@ unsigned int digitalReadByte2 (void)
 
 
 unsigned long long pulseInNS(int pin, int level, unsigned long long timeout_ns) {
-  if (h618Detected()) { h618Unsupported(__func__); return 0; }
+  if (h618Detected()) return h618Measure(h618CurrentPin(pin), level, timeout_ns, 0);
 
   wiringPiISR2(pin, INT_EDGE_BOTH, NULL, 0, NULL);
 
@@ -2935,7 +2943,10 @@ unsigned long long pulseInNS(int pin, int level, unsigned long long timeout_ns) 
  *********************************************************************************
  */
 unsigned long long frequencyIn(int pin, unsigned long window_ms) {
-  if (h618Detected()) { h618Unsupported(__func__); return 0; }
+  if (h618Detected()) {
+    if (window_ms > INT64_MAX/1000000u) { errno=EINVAL; return 0; }
+    return h618Measure(h618CurrentPin(pin), HIGH, (uint64_t)window_ms*1000000u, 1);
+  }
 
   unsigned long long start_time = piMicros64();
   wiringPiISR2(pin, INT_EDGE_RISING, NULL, 0, NULL);
@@ -2970,11 +2981,7 @@ unsigned long long frequencyIn(int pin, unsigned long window_ms) {
 
 struct WPIWfiStatus waitForInterrupt2(int pin, int edgeMode, int ms, unsigned long debounce_period_us)    // ms < 0 wait infinite, = 0 return immediately, > 0 wait timeout
 {
-  if (h618Detected()) {
-    h618Unsupported(__func__);
-    struct WPIWfiStatus failure = {.statusOK = -1};
-    return failure;
-  }
+  if (h618Detected()) return h618Wait(h618CurrentPin(pin), edgeMode, ms, debounce_period_us);
   int ret;
   int fd, attr, status, readret;
   struct pollfd polls ;
@@ -3147,7 +3154,7 @@ int waitForInterrupt (int pin, int ms) {
  */
 
 int wiringPiISRStop(int pin) {
-  if (h618Detected()) return h618Unsupported(__func__);
+  if (h618Detected()) return h618WorkerStop(h618CurrentPin(pin), 1);
 
   if (wiringPiMode == WPI_MODE_UNINITIALISED) {
     return wiringPiFailure(WPI_FATAL, "wiringPiISRStop: wiringPi has not been initialised. Unable to continue.\n");
@@ -3206,7 +3213,7 @@ int wiringPiISRStop(int pin) {
 }
 
 int waitForInterruptClose(int pin) {
-  if (h618Detected()) return h618Unsupported(__func__);
+  if (h618Detected()) return h618WorkerStop(h618CurrentPin(pin), 1);
   return wiringPiISRStop(pin);
 }
 
@@ -3446,7 +3453,7 @@ static void *interruptHandlerV2(void *arg)
 
 int wiringPiISRInternal(int pin, int edgeMode, void (*function)(struct WPIWfiStatus wfiStatus, void* userdata), void (*functionClassic)(void), unsigned long debounce_period_us, void* userdata)
 {
-  if (h618Detected()) return h618Unsupported(__func__);
+  if (h618Detected()) return h618ISR(h618CurrentPin(pin), edgeMode, function, functionClassic, debounce_period_us, userdata);
   if (wiringPiMode == WPI_MODE_UNINITIALISED) {
     return wiringPiFailure(WPI_FATAL, "wiringPiISR: wiringPi has not been initialised. Unable to continue.\n");
   }
@@ -3697,7 +3704,7 @@ unsigned long long piMicros64(void) {
 */
 unsigned int pulseIn(int pin, int level, unsigned int timeout_us) {
 
-  return (pulseInNS(pin, level, timeout_us*1000) / 1000);
+  return (pulseInNS(pin, level, (unsigned long long)timeout_us*1000) / 1000);
 }
 
 /*

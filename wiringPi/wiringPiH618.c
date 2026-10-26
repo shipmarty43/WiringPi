@@ -86,6 +86,7 @@ int h618Map(int pin, int mode) {
 }
 
 void h618Close(void) {
+  if (h618WorkersClose() < 0 && errno == EDEADLK) return;
   pthread_mutex_lock(&lock);
   if (chip >= 0) {
     for (int i = 0; i < 28; ++i) {
@@ -157,6 +158,30 @@ reject:
   pthread_mutex_unlock(&lock);
   if (result < 0) errno = error;
   return result;
+}
+
+/* Separate exclusive request for an IRQ/PWM worker. The kernel arbitrates
+ * ownership against normal GPIO requests and other processes. */
+int h618Request(int pin, uint64_t flags, unsigned long debounce) {
+  int i = slot(pin), ret = -1;
+  if (i < 0) return -1;
+  pthread_mutex_lock(&lock);
+  if (chip < 0) errno = ENODEV;
+  else {
+    struct gpio_v2_line_request req = {.num_lines=1, .event_buffer_size=64};
+    req.offsets[0]=offsets[i];
+    req.config.flags=flags;
+    strcpy(req.consumer, "wiringpi-h618-worker");
+    if (debounce) {
+      req.config.num_attrs=1;
+      req.config.attrs[0].attr.id=GPIO_V2_LINE_ATTR_ID_DEBOUNCE;
+      req.config.attrs[0].attr.debounce_period_us=debounce;
+      req.config.attrs[0].mask=1;
+    }
+    if (ioctl(chip, GPIO_V2_GET_LINE_IOCTL, &req) == 0) ret=req.fd;
+  }
+  pthread_mutex_unlock(&lock);
+  return ret;
 }
 
 /* Caller holds lock. Reconfigure an owned request atomically: no release gap,

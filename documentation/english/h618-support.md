@@ -28,14 +28,53 @@ layout and does not substitute Allwinner addresses into BCM register code.
   Existing SPI explicit bus/device API and I2C explicit-adapter API remain usable.
   H618 implicit `wiringPiI2CSetup` fails; select `wiringPiI2CSetupInterface` with
   the actual Linux adapter path after checking the running image.
+- `wiringPiISR`, `wiringPiISR2`, `wiringPiISRStop`, `waitForInterrupt2` and
+  `waitForInterruptClose`, using kernel GPIO v2 edge events and optional debounce.
+- `softPwmCreate/Write/Stop`, `softToneCreate/Write/Stop`, and
+  `pinMode(SOFT_PWM_OUTPUT/SOFT_TONE_OUTPUT)`, using cancellable worker threads.
+- `pulseInNS`, `pulseIn`, `frequencyIn`, using kernel edge timestamps.
 
 Unsupported operations return -1 where available (void APIs report an error and
-set `errno=ENOTSUP`; unsigned byte/pulse APIs return 0 with ENOTSUP): alternate
-function writes, pad drive, hardware PWM/clock, software PWM/tone, interrupt
-callbacks/waits, pulse measurement, Pi-specific byte operations and onboard ADC.
+set `errno=ENOTSUP`; unsigned byte APIs return 0 with ENOTSUP): alternate
+function writes, pad drive, hardware PWM/clock, the deprecated
+`waitForInterrupt` (use `waitForInterrupt2`), Pi-specific byte operations and
+onboard ADC.
 These are **not** advertised as working H618 implementations. Peripheral mux,
 SPI, I2C, UART and PWM routing remains the responsibility of kernel drivers and
 DT overlays. Full API coverage and physical validation are separate work.
+
+### Worker ownership and timing
+
+Each IRQ, measurement, software PWM or tone worker owns an exclusive kernel line
+request. It never steals an existing digital-I/O request: use `pinMode(pin,
+PM_OFF)` before changing a previously requested input/output into a worker.
+Stop a worker before using normal digital I/O on that pin. Duplicate requests
+fail with EBUSY. `PM_OFF` stops the worker and releases the line; `h618Close()`
+joins all workers before closing the GPIO backend. Software outputs are driven
+LOW before release. No output level is guaranteed after ownership is released.
+
+Use one thread to coordinate setup, numbering changes, close and replacement of
+workers. Do not start a replacement worker until a concurrent wait/measurement
+on that line has returned. Stopping an active wait from another thread wakes it
+with ECANCELED. Keep callbacks short: they run on the line's worker thread,
+outside internal locks. Stop, close and blocking measurement/wait calls from a
+callback fail with EDEADLK; arrange cleanup from the controlling thread instead.
+Keep callback data alive until stop has returned. Kernel event sequence gaps
+are reported as EOVERFLOW on stop instead of silently accepting lost edges.
+
+`WPIWfiStatus.pinBCM` contains the **native sunxi number** on H618 despite its
+legacy field name; timestamps use the kernel's monotonic clock. Rising, falling
+and both-edge modes are supported; INT_EDGE_SETUP is not. Debounce is requested
+from the kernel and unsupported settings propagate errors. `getAlt` currently
+reports only ordinary digital-I/O requests, not worker-owned lines.
+
+Software PWM uses 100 microseconds per range unit (range 100 nominally 100 Hz).
+Tone clamps frequency to 0..5000 Hz; zero holds LOW. These are scheduler-dependent
+signals, not precision hardware PWM. `pulseIn*` measures the next complete pulse;
+`frequencyIn` estimates frequency between first and last rising edges in the
+requested window. Timeouts or insufficient edges return zero with errno zero;
+errors return zero with errno set. Kernel timestamps improve measurement over
+userspace polling but do not establish electrical timing accuracy.
 
 ## Header map and kernel discovery
 
@@ -167,6 +206,42 @@ failed reopen and retry; native Raspberry Pi revision-decoding tests also passed
 To repeat, first disconnect other devices from those two contacts and connect
 them through 1 kOhm. Compile and run the manual test on Zero 2W; never run it on
 unknown wiring. It only owns those two contacts and does not transmit RF.
-These results establish digital GPIO behavior for this pair on this kernel, not
-every header contact, voltage accuracy, timing limits, SPI/I2C, PWM or interrupts.
+These level tests establish digital GPIO behavior for this pair on this kernel,
+not every header contact, voltage accuracy, timing limits or SPI/I2C.
 Voltage levels and signal timing have not been measured with external instruments.
+
+### IRQ, software waveform and measurement validation
+
+On the same image and 37-to-29 resistor connection, the manual
+`wiringPi/test/wiringpi_test_h618_events.c` test passed on 2026-10-26:
+
+- Ten rising and ten falling IRQ callbacks with correct pin/edge/timestamp data;
+  duplicate ownership rejected; timed wait expiry and delayed rising event.
+- Software PWM and tone at nominal 100 Hz, 0/100% PWM duty, zero tone and cleanup.
+- Frequency and pulse measurement: approximately 98 Hz and 5.1 ms half-periods
+  for the scheduler-driven nominal 100 Hz PWM.
+- Kernel acceptance of a 1000 microsecond debounce request, close with active
+  workers, reopen and reuse in native numbering. This checks debounce setup,
+  not suppression of an independently measured burst of contact bounce.
+- All 120 digital loopback checks repeated after the worker changes; final
+  metadata confirmed physical 37 and 29 had no remaining owner.
+
+Build and run from the repository root on the wired board:
+
+```sh
+make -C wiringPi -j4
+cc -Wall -Wextra -Werror -IwiringPi wiringPi/test/wiringpi_test_h618_events.c \
+  wiringPi/libwiringPi.so.3.20 -lpthread -o /tmp/h618-events
+LD_LIBRARY_PATH="$PWD/wiringPi" timeout 20 /tmp/h618-events
+```
+
+The host-test target also checks real pthread/eventfd/poll lifecycle with mocked
+GPIO: FD 0, failed thread/request cleanup, callback self-stop rejection, queue
+overflow, waveform stop, timeout and external cancellation of a wait/measurement.
+ASan/UBSan regressions passed on both x86-64 and the board's AArch64 CPU.
+
+Hardware PWM remains unimplemented and untested. This image exposes six kernel
+PWM channels; PWM5 is already owned by a kernel consumer. Header PWM1 is PI11
+(physical 32), requiring the appropriate kernel pinctrl/overlay configuration.
+The owner kept the resistor on 37-to-29, so no PWM1 routing or output was enabled.
+Do not treat software PWM results as validation of the hardware PWM controller.
