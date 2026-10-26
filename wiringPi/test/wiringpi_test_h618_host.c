@@ -125,6 +125,10 @@ int main(void) {
   assert(wiringPiSetupPhys() == 0 && digitalRead(3) == 1);
   assert(wiringPiSetupGpio() == 0 && digitalRead(264) == 1);
   assert(digitalRead(1) == -1); /* no BCM masking / alias */
+  int held_requests = requests;
+  assert(wiringPiSetup() == 0 && digitalRead(0) == 1);
+  assert(requests == held_requests); /* Changing numbering preserves ownership. */
+  assert(wiringPiSetupSys() == 0 && digitalRead(264) == 1);
   pinMode(264, PM_OFF);
   errno = 0; pwmWrite(264, 12); assert(errno == ENOTSUP);
   assert(wiringPiISR(264, INT_EDGE_BOTH, NULL) == -1 && errno == ENOTSUP);
@@ -133,6 +137,15 @@ int main(void) {
   char *args[] = {"gpio", "readall"};
   assert(h618Command(2, args, WPI_MODE_PINS) == 0);
   assert(requests == before);
+  h618Close();
+  chipinfo_fail = 1;
+  assert(wiringPiSetup() == -1); /* A stale setup flag must not hide reopen errors. */
+  chipinfo_fail = 0;
+  assert(wiringPiSetupPhys() == 0 && digitalRead(3) == 1);
+  h618Close();
+  assert(wiringPiSetup() == 0 && digitalRead(0) == 1);
+  h618Close();
+  assert(wiringPiSetupSys() == 0 && digitalRead(264) == 1);
   h618Close();
 #endif
   unnamed = 1; /* Standard mainline controller without line names. */

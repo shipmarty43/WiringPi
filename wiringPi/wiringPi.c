@@ -3846,11 +3846,12 @@ int wiringPiGlobalMemoryAccess(void)
 int wiringPiSetup (void)
 {
   if (h618Detected()) {
-    if (wiringPiSetuped) return 0;
+    /* h618Close() may have released the backend since the previous setup.
+     * h618Setup() is idempotent and preserves any existing line requests. */
     if (h618Setup() < 0) { perror("wiringPi: H618 GPIO setup"); return -1; }
+    if (!wiringPiSetuped) initialiseEpoch();
     wiringPiSetuped = true;
     wiringPiMode = WPI_MODE_PINS;
-    initialiseEpoch();
     return 0;
   }
   int   fd ;
@@ -4172,6 +4173,7 @@ int wiringPiSetupGpioDevice (enum WPIPinType pinType) {
 
 int wiringPiSetupSys (void)
 {
+  if (h618Detected()) return wiringPiSetupGpioDevice(WPI_PIN_BCM);
   if (wiringPiSetuped)
     return 0 ;
   if (wiringPiDebug)

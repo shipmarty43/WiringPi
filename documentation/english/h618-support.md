@@ -137,10 +137,36 @@ Raspberry Pi descriptor API. The existing `WIRINGPI_FORCE_REVISION` test hook
 still exercises Raspberry Pi identity decoding on H618; it does not change GPIO
 backend detection or pin mapping.
 
-Start with `gpio -v` and `gpio readall`. For a controlled loopback,
-disconnect devices from physical pins 37 and 29, connect them through 1 kOhm,
-and compile/run `wiringPi/test/wiringpi_test_h618_loopback.c`. It owns only those
-two lines, checks 20 alternating levels and releases them. It has not yet run
-on the user's board. Confirm pin voltages, pull resistors, busy peripheral
-rejection and behavior after process exit on the actual board before relying on
-this backend. No RF transmission is involved in this test.
+### Physical loopback validation
+
+After a reboot on 2026-10-26, the user connected physical header contacts **37
+(PI16, sunxi 272, wPi 25)** and **29 (PI0, sunxi 256, wPi 19)** through a 1 kOhm
+resistor. The initial 20-level output-37/input-29 test passed. The expanded
+`wiringPi/test/wiringpi_test_h618_loopback.c` then passed:
+
+- 120 alternating level checks: both directions in physical, wPi and sunxi
+  numbering (20 checks per direction per mode).
+- Internal pull-up/down readback with both contacts configured as inputs, one
+  pull enabled and the other disabled, on each contact in all three modes.
+- Preservation of output HIGH while changing its bias; INPUT/OUTPUT reporting.
+- `PM_OFF` release of both lines, close/reopen between modes, and final GPIO
+  metadata showing no owner on either contact.
+
+An independent CLI process test confirmed that a second `hold` on physical 37
+failed with EBUSY while physical 29 still read the original LOW. SIGKILL of the
+owner released the request in the kernel; reacquisition and normal timed exit
+also released the line. Physical UART contacts 8/10 were not requested or changed.
+
+The expanded test exposed a stale setup flag: returning to wPi numbering after
+physical numbering, or reopening after `h618Close()`, incorrectly skipped setup.
+H618 setup now revalidates/reopens the backend and selects the requested numbering
+without dropping existing requests. `wiringPiSetupSys()` follows the same path.
+Host and native ASan/UBSan regressions cover mode switching, preserved ownership,
+failed reopen and retry; native Raspberry Pi revision-decoding tests also passed.
+
+To repeat, first disconnect other devices from those two contacts and connect
+them through 1 kOhm. Compile and run the manual test on Zero 2W; never run it on
+unknown wiring. It only owns those two contacts and does not transmit RF.
+These results establish digital GPIO behavior for this pair on this kernel, not
+every header contact, voltage accuracy, timing limits, SPI/I2C, PWM or interrupts.
+Voltage levels and signal timing have not been measured with external instruments.
