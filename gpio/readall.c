@@ -35,6 +35,8 @@
 #include <sys/stat.h>
 
 #include <wiringPi.h>
+#include <wiringPiH618.h>
+extern void h618Readall(void);
 
 extern int wpMode ;
 
@@ -367,6 +369,7 @@ static void piPlusReadall (int model)
 
 void doReadall (void)
 {
+  if (h618Detected()) { h618Readall(); return; }
   int model, rev, mem, maker, overVolted ;
 
   if (wiringPiNodes != NULL)	// External readall
@@ -402,6 +405,7 @@ void doReadall (void)
 
 void doAllReadall (void)
 {
+  if (h618Detected()) { h618Readall(); return; }
   allReadall () ;
 }
 

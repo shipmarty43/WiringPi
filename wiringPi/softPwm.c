@@ -27,6 +27,7 @@
 #include <pthread.h>
 
 #include "wiringPi.h"
+#include "wiringPiH618.h"
 #include "softPwm.h"
 
 // MAX_PINS:
@@ -106,6 +107,7 @@ static void *softPwmThread (void *arg)
 
 void softPwmWrite (int pin, int value)
 {
+  if (h618Detected()) { h618Unsupported(__func__); return; }
   if (pin < MAX_PINS)
   {
     if      (value < 0)           { value = 0 ; }
@@ -124,6 +126,7 @@ void softPwmWrite (int pin, int value)
 
 int softPwmCreate (int pin, int initialValue, int pwmRange)
 {
+  if (h618Detected()) { h618Unsupported(__func__); return -1; }
   int res ;
   pthread_t myThread ;
   int *passPin ;
@@ -171,6 +174,7 @@ int softPwmCreate (int pin, int initialValue, int pwmRange)
 
 void softPwmStop (int pin)
 {
+  if (h618Detected()) { h618Unsupported(__func__); return; }
   if (pin < MAX_PINS)
   {
     if (range [pin] != 0)

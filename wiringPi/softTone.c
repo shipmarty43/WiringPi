@@ -30,6 +30,7 @@
 #include <pthread.h>
 
 #include "wiringPi.h"
+#include "wiringPiH618.h"
 #include "softTone.h"
 
 #define	MAX_PINS	64
@@ -90,6 +91,7 @@ static PI_THREAD (softToneThread)
 
 void softToneWrite (int pin, int freq)
 {
+  if (h618Detected()) { h618Unsupported(__func__); return; }
   pin &= 63 ;
 
   if      (freq < 0)
@@ -109,6 +111,7 @@ void softToneWrite (int pin, int freq)
 
 int softToneCreate (int pin)
 {
+  if (h618Detected()) { h618Unsupported(__func__); return -1; }
   int res ;
   pthread_t myThread ;
 
@@ -140,6 +143,7 @@ int softToneCreate (int pin)
 
 void softToneStop (int pin)
 {
+  if (h618Detected()) { h618Unsupported(__func__); return; }
   if (threads [pin] != 0)
   {
     pthread_cancel (threads [pin]) ;

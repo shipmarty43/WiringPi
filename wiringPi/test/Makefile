@@ -13,7 +13,19 @@ host-test:
 	$(CC) -g -Wall -Wextra -Werror $(HOST_TEST_SANITIZERS) -I.. \
 	  -Dopen=wpi_test_open -Dclose=wpi_test_close -Dioctl=wpi_test_ioctl \
 	  ../wiringPiSPI.c wiringpi_test_spi_host.c -o "$$tmpdir/spi-test"; \
-	"$$tmpdir/spi-test"
+	"$$tmpdir/spi-test"; \
+	$(CC) -g -Wall -Wextra -Werror $(HOST_TEST_SANITIZERS) -I.. \
+	  -Dopen=wpi_test_open -Dclose=wpi_test_close -Dioctl=wpi_test_ioctl \
+	  -Dglob=wpi_test_glob -Dglobfree=wpi_test_globfree \
+	  ../wiringPiH618.c wiringpi_test_h618_host.c -lpthread -o "$$tmpdir/h618-test"; \
+	"$$tmpdir/h618-test"; \
+	$(CC) -g -Wall $(HOST_TEST_SANITIZERS) -I.. -D_GNU_SOURCE -DWPI_INTEGRATION \
+	  -Dopen=wpi_test_open -Dclose=wpi_test_close -Dioctl=wpi_test_ioctl \
+	  -Dglob=wpi_test_glob -Dglobfree=wpi_test_globfree \
+	  ../wiringPiH618.c wiringpi_test_h618_host.c ../wiringPi.c \
+	  ../wiringPiLegacy.c ../softPwm.c ../softTone.c ../piHiPri.c ../../gpio/h618.c \
+	  -Wl,--wrap=h618Detected -lpthread -lm -o "$$tmpdir/h618-integration"; \
+	"$$tmpdir/h618-integration"
 
 pwmtests = wiringpi_test0_version wiringpi_test8_pwm wiringpi_test81_pwm
 

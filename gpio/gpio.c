@@ -43,6 +43,8 @@
 
 #include "../version.h"
 #include "readall.h"
+#include <wiringPiH618.h>
+extern int h618Command(int argc, char **argv, int mode);
 
 extern int wiringPiDebug ;
 int gpioDebug ;
@@ -1078,7 +1080,7 @@ int main (int argc, char *argv [])
 
   if (strcasecmp (argv [1], "allreadall") == 0)
   {
-    wiringPiSetupGpio () ;
+    if (wiringPiSetupGpio () < 0) return EXIT_FAILURE;
     doAllReadall      () ;
     return 0 ;
   }
@@ -1087,7 +1089,7 @@ int main (int argc, char *argv [])
 
   if (strcasecmp (argv [1], "-g") == 0)
   {
-    wiringPiSetupGpio () ;
+    if (wiringPiSetupGpio () < 0) return EXIT_FAILURE;
 
     for (i = 2 ; i < argc ; ++i)
       argv [i - 1] = argv [i] ;
@@ -1099,7 +1101,7 @@ int main (int argc, char *argv [])
 
   else if (strcasecmp (argv [1], "-1") == 0)
   {
-    wiringPiSetupPhys () ;
+    if (wiringPiSetupPhys () < 0) return EXIT_FAILURE;
 
     for (i = 2 ; i < argc ; ++i)
       argv [i - 1] = argv [i] ;
@@ -1133,9 +1135,11 @@ int main (int argc, char *argv [])
 
   else
   {
-    wiringPiSetup () ;
+    if (wiringPiSetup () < 0) return EXIT_FAILURE;
     wpMode = WPI_MODE_PINS ;
   }
+
+  if (h618Detected()) return h618Command(argc, argv, wpMode);
 
 // Check for -x argument to load in a new extension
 //	-x extension:base:args

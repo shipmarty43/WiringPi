@@ -55,6 +55,7 @@
 #include <asm/ioctl.h>
 
 #include "wiringPi.h"
+#include "wiringPiH618.h"
 #include "wiringPiI2C.h"
 
 // I2C definitions
@@ -255,6 +256,7 @@ int wiringPiI2CSetupInterface (const char *device, int devId)
 
 int wiringPiI2CSetup (const int devId)
 {
+  if (h618Detected()) return h618Unsupported("implicit I2C adapter; use wiringPiI2CSetupInterface");
   int rev ;
   const char *device ;
 

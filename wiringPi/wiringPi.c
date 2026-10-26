@@ -84,6 +84,7 @@
 #include "softTone.h"
 
 #include "wiringPi.h"
+#include "wiringPiH618.h"
 #include "rp1_registers.h"
 #include "bcm_registers.h"
 #include "../version.h"
@@ -381,6 +382,7 @@ const char *piModelNames [PI_MODELS_MAX] =
   "Pi 500",	   // 25
   "CM5 Lite",	 // 26
   "CM0",	     // 27
+  "Orange Pi Zero 2W", // 28
 } ;
 
 const char *piProcessor [5] =
@@ -688,6 +690,7 @@ int piRP1Model() {
 
 
 int GetMaxPin() {
+  if (h618Detected()) return wiringPiMode == WPI_MODE_GPIO ? 272 : (wiringPiMode == WPI_MODE_PHYS ? 40 : 27);
   if (piRP1Model()) {
     switch(wiringPiMode) {
       case WPI_MODE_PHYS:
@@ -704,6 +707,7 @@ int GetMaxPin() {
 
 
 int ToBCMPin(int* pin) {
+  if (h618Detected()) { h618Unsupported(__func__); return FALSE; }
   if (*pin<0 || *pin>63) {
     return FALSE;
   }
@@ -1222,6 +1226,14 @@ unsigned int GetPiRAM (void) {
 
 void piBoardId (int *model, int *rev, int *mem, int *maker, int *warranty)
 {
+  if (h618Detected()) {
+    *model = PI_MODEL_ORANGEPI_ZERO_2W;
+    *rev = 0; *mem = 7; *maker = PI_MAKER_UNKNOWN; *warranty = 0;
+    piMemorySize[7] = 0; /* Unknown; do not fabricate RAM size. */
+    RaspberryPiModel = *model;
+    RaspberryPiLayout = GPIO_LAYOUT_DEFAULT;
+    return;
+  }
   const int maxlength = 120;
   char line [maxlength+1] ;
   const char *c ;
@@ -1378,6 +1390,7 @@ void piBoardId (int *model, int *rev, int *mem, int *maker, int *warranty)
 
 int wpiPinToGpio (int wpiPin)
 {
+  if (h618Detected()) return h618Wpi(wpiPin);
   return pinToGpio [wpiPin & 63] ;
 }
 
@@ -1391,6 +1404,7 @@ int wpiPinToGpio (int wpiPin)
 
 int physPinToGpio (int physPin)
 {
+  if (h618Detected()) return h618Physical(physPin);
   return physToGpio [physPin & 63] ;
 }
 
@@ -1401,6 +1415,7 @@ int physPinToGpio (int physPin)
  *********************************************************************************
  */
 void setPadDrivePin (int pin, int value) {
+  if (h618Detected()) { h618Unsupported(__func__); return; }
   if (!piRP1Model() || !ToBCMPin(&pin)) {
     return;
   }
@@ -1417,6 +1432,7 @@ void setPadDrivePin (int pin, int value) {
 
 void setPadDrive (int group, int value)
 {
+  if (h618Detected()) { h618Unsupported(__func__); return; }
   uint32_t wrVal, rdVal;
 
   if ((wiringPiMode == WPI_MODE_PINS) || (wiringPiMode == WPI_MODE_PHYS) || (wiringPiMode == WPI_MODE_GPIO))
@@ -1482,6 +1498,7 @@ void setPadDrive (int group, int value)
 
 int getAlt (int pin)
 {
+  if (h618Detected()) return h618Mode(h618Map(pin, wiringPiMode));
   int alt;
 
   if (!ToBCMPin(&pin)) {
@@ -1546,6 +1563,7 @@ enum WPIPinAlt getPinModeAlt(int pin) {
 
 void pwmSetMode (int mode)
 {
+  if (h618Detected()) { h618Unsupported(__func__); return; }
   if ((wiringPiMode == WPI_MODE_PINS) || (wiringPiMode == WPI_MODE_PHYS) || (wiringPiMode == WPI_MODE_GPIO))
   {
     if (piRP1Model()) {
@@ -1573,6 +1591,7 @@ void pwmSetMode (int mode)
  */
 
 void pwmSetRange (unsigned int range) {
+  if (h618Detected()) { h618Unsupported(__func__); return; }
 
   if ((wiringPiMode == WPI_MODE_PINS) || (wiringPiMode == WPI_MODE_PHYS) || (wiringPiMode == WPI_MODE_GPIO)) {
 
@@ -1638,6 +1657,7 @@ void pwmSetRange (unsigned int range) {
  */
 
 void pwmSetChannelRange (unsigned int channel, unsigned int range) {
+  if (h618Detected()) { h618Unsupported(__func__); return; }
 
   if ((wiringPiMode == WPI_MODE_PINS) || (wiringPiMode == WPI_MODE_PHYS) || (wiringPiMode == WPI_MODE_GPIO)) {
 
@@ -1708,6 +1728,7 @@ void pwmSetChannelRange (unsigned int channel, unsigned int range) {
  */
 
 void pwmSetPinRange(int pin, unsigned int range)  {
+  if (h618Detected()) { h618Unsupported(__func__); return; }
 
   if (!ToBCMPin(&pin)) {
     return;
@@ -1760,6 +1781,7 @@ void pwmSetPinRange(int pin, unsigned int range)  {
 
 void pwmSetClock (int divisor)
 {
+  if (h618Detected()) { h618Unsupported(__func__); return; }
   uint32_t pwm_control ;
   if (!clk) {
       fprintf(stderr, "wiringPi: pwmSetClock but no clk memory available, ignoring\n");
@@ -1839,6 +1861,7 @@ void pwmSetClock (int divisor)
 
 void gpioClockSet (int pin, int freq)
 {
+  if (h618Detected()) { h618Unsupported(__func__); return; }
   int divi, divr, divf ;
 
   FailOnModel5("gpioClockSet");
@@ -1898,6 +1921,8 @@ static void analogWriteDummy     (UNU struct wiringPiNodeStruct *node, UNU int p
 
 struct wiringPiNodeStruct *wiringPiNewNode (int pinBase, int numPins)
 {
+  if (h618Detected() && pinBase < 512)
+    wiringPiFailure(WPI_FATAL, "H618 extension pin bases must be >= 512\n");
   int    pin ;
   struct wiringPiNodeStruct *node ;
 
@@ -1993,6 +2018,7 @@ int OpenAndCheckGpioChip(int GPIONo, const char* label, const unsigned int lines
 }
 
 int wiringPiGpioDeviceGetFd() {
+  if (h618Detected()) return h618Unsupported(__func__);
   if (chipFd<0) {
     piBoard();
     if (piRP1Model()) {
@@ -2093,6 +2119,7 @@ int requestLineV2(int pin, const unsigned int lineRequestFlags) {
 
 void pinModeAlt (int pin, int mode)
 {
+  if (h618Detected()) { h618Unsupported(__func__); return; }
   setupCheck ("pinModeAlt") ;
 
   if (!ToBCMPin(&pin)) {
@@ -2192,6 +2219,10 @@ void pinModeDevice (int pin, int mode) {
 
 void pinMode (int pin, int mode)
 {
+  if (h618Detected() && !wiringPiFindNode(pin)) {
+    if (h618PinMode(h618Map(pin, wiringPiMode), mode) < 0) perror("wiringPi: pinMode");
+    return;
+  }
   int    fSel, shift, alt ;
   struct wiringPiNodeStruct *node = wiringPiNodes ;
   int origPin = pin ;
@@ -2365,6 +2396,10 @@ void pullUpDnControlDevice (int pin, int pud) {
 
 void pullUpDnControl (int pin, int pud)
 {
+  if (h618Detected() && !wiringPiFindNode(pin)) {
+    if (h618Pull(h618Map(pin, wiringPiMode), pud) < 0) perror("wiringPi: pullUpDnControl");
+    return;
+  }
   struct wiringPiNodeStruct *node = wiringPiNodes ;
 
   setupCheck ("pullUpDnControl") ;
@@ -2499,6 +2534,8 @@ int digitalReadDeviceV2(int pin) {   // INPUT and OUTPUT should work
 
 int digitalRead (int pin)
 {
+  if (h618Detected() && !wiringPiFindNode(pin))
+    return h618Read(h618Map(pin, wiringPiMode));
   struct wiringPiNodeStruct *node = wiringPiNodes ;
 
   if ((pin & PI_GPIO_MASK) == 0)		// On-Board Pin
@@ -2583,6 +2620,10 @@ void digitalWriteDeviceV2(int pin, int value) {
 
 void digitalWrite (int pin, int value)
 {
+  if (h618Detected() && !wiringPiFindNode(pin)) {
+    if (h618Write(h618Map(pin, wiringPiMode), value) < 0) perror("wiringPi: digitalWrite");
+    return;
+  }
   struct wiringPiNodeStruct *node = wiringPiNodes ;
 
   if ((pin & PI_GPIO_MASK) == 0)		// On-Board Pin
@@ -2635,6 +2676,7 @@ void digitalWrite (int pin, int value)
 
 void pwmWrite (int pin, int value)
 {
+  if (h618Detected() && !wiringPiFindNode(pin)) { h618Unsupported(__func__); return; }
   struct wiringPiNodeStruct *node = wiringPiNodes ;
 
   setupCheck ("pwmWrite") ;
@@ -2687,6 +2729,7 @@ void pwmWrite (int pin, int value)
 
 int analogRead (int pin)
 {
+  if (h618Detected() && !wiringPiFindNode(pin)) return h618Unsupported(__func__);
   struct wiringPiNodeStruct *node = wiringPiNodes ;
 
   if ((node = wiringPiFindNode (pin)) == NULL)
@@ -2706,6 +2749,7 @@ int analogRead (int pin)
 
 void analogWrite (int pin, int value)
 {
+  if (h618Detected() && !wiringPiFindNode(pin)) { h618Unsupported(__func__); return; }
   struct wiringPiNodeStruct *node = wiringPiNodes ;
 
   if ((node = wiringPiFindNode (pin)) == NULL)
@@ -2724,6 +2768,7 @@ void analogWrite (int pin, int value)
 
 void pwmToneWrite (int pin, int freq)
 {
+  if (h618Detected()) { h618Unsupported(__func__); return; }
   setupCheck ("pwmToneWrite") ;
 
   if (freq == 0)
@@ -2756,6 +2801,7 @@ void pwmToneWrite (int pin, int freq)
 
 void digitalWriteByte (const int value)
 {
+  if (h618Detected()) { h618Unsupported(__func__); return; }
   uint32_t pinSet = 0 ;
   uint32_t pinClr = 0 ;
   int mask = 1 ;
@@ -2786,6 +2832,7 @@ void digitalWriteByte (const int value)
 
 unsigned int digitalReadByte (void)
 {
+  if (h618Detected()) { h618Unsupported(__func__); return 0; }
   int pin, x ;
   uint32_t raw ;
   uint32_t data = 0 ;
@@ -2821,6 +2868,7 @@ unsigned int digitalReadByte (void)
 
 void digitalWriteByte2 (const int value)
 {
+  if (h618Detected()) { h618Unsupported(__func__); return; }
   FailOnModel5("digitalWriteByte2");
 
   if (wiringPiMode == WPI_MODE_GPIO_SYS)
@@ -2835,6 +2883,7 @@ void digitalWriteByte2 (const int value)
 
 unsigned int digitalReadByte2 (void)
 {
+  if (h618Detected()) { h618Unsupported(__func__); return 0; }
   uint32_t data = 0 ;
 
   FailOnModel5("digitalReadByte2");
@@ -2850,6 +2899,7 @@ unsigned int digitalReadByte2 (void)
 
 
 unsigned long long pulseInNS(int pin, int level, unsigned long long timeout_ns) {
+  if (h618Detected()) { h618Unsupported(__func__); return 0; }
 
   wiringPiISR2(pin, INT_EDGE_BOTH, NULL, 0, NULL);
 
@@ -2882,6 +2932,7 @@ unsigned long long pulseInNS(int pin, int level, unsigned long long timeout_ns) 
  *********************************************************************************
  */
 unsigned long long frequencyIn(int pin, unsigned long window_ms) {
+  if (h618Detected()) { h618Unsupported(__func__); return 0; }
 
   unsigned long long start_time = piMicros64();
   wiringPiISR2(pin, INT_EDGE_RISING, NULL, 0, NULL);
@@ -2916,6 +2967,11 @@ unsigned long long frequencyIn(int pin, unsigned long window_ms) {
 
 struct WPIWfiStatus waitForInterrupt2(int pin, int edgeMode, int ms, unsigned long debounce_period_us)    // ms < 0 wait infinite, = 0 return immediately, > 0 wait timeout
 {
+  if (h618Detected()) {
+    h618Unsupported(__func__);
+    struct WPIWfiStatus failure = {.statusOK = -1};
+    return failure;
+  }
   int ret;
   int fd, attr, status, readret;
   struct pollfd polls ;
@@ -3065,6 +3121,7 @@ struct WPIWfiStatus waitForInterrupt2(int pin, int edgeMode, int ms, unsigned lo
 }
 
 int waitForInterrupt (int pin, int ms) {
+  if (h618Detected()) return h618Unsupported(__func__);
   struct WPIWfiStatus status;
 
   int edgeMode = isrEdgeMode[pin];
@@ -3087,6 +3144,7 @@ int waitForInterrupt (int pin, int ms) {
  */
 
 int wiringPiISRStop(int pin) {
+  if (h618Detected()) return h618Unsupported(__func__);
 
   if (wiringPiMode == WPI_MODE_UNINITIALISED) {
     return wiringPiFailure(WPI_FATAL, "wiringPiISRStop: wiringPi has not been initialised. Unable to continue.\n");
@@ -3145,6 +3203,7 @@ int wiringPiISRStop(int pin) {
 }
 
 int waitForInterruptClose(int pin) {
+  if (h618Detected()) return h618Unsupported(__func__);
   return wiringPiISRStop(pin);
 }
 
@@ -3384,6 +3443,7 @@ static void *interruptHandlerV2(void *arg)
 
 int wiringPiISRInternal(int pin, int edgeMode, void (*function)(struct WPIWfiStatus wfiStatus, void* userdata), void (*functionClassic)(void), unsigned long debounce_period_us, void* userdata)
 {
+  if (h618Detected()) return h618Unsupported(__func__);
   if (wiringPiMode == WPI_MODE_UNINITIALISED) {
     return wiringPiFailure(WPI_FATAL, "wiringPiISR: wiringPi has not been initialised. Unable to continue.\n");
   }
@@ -3652,6 +3712,7 @@ void wiringPiVersion (int *major, int *minor)
 
 int wiringPiUserLevelAccess(void)
 {
+  if (h618Detected()) return 0;
   struct stat statBuf ;
   const char* gpiomemModule = gpiomem_BCM;
 
@@ -3716,6 +3777,7 @@ void GetRP1Memory(void) {
 
 int wiringPiGlobalMemoryAccess(void)
 {
+  if (h618Detected()) return 0;
   const char* gpiomemGlobal;
   int fd=-1;
   unsigned int MMAP_size;
@@ -3780,6 +3842,14 @@ int wiringPiGlobalMemoryAccess(void)
 
 int wiringPiSetup (void)
 {
+  if (h618Detected()) {
+    if (wiringPiSetuped) return 0;
+    if (h618Setup() < 0) { perror("wiringPi: H618 GPIO setup"); return -1; }
+    wiringPiSetuped = true;
+    wiringPiMode = WPI_MODE_PINS;
+    initialiseEpoch();
+    return 0;
+  }
   int   fd ;
   int   model, rev, mem, maker, overVolted ;
 
@@ -3999,7 +4069,7 @@ int wiringPiSetup (void)
 
 int wiringPiSetupGpio (void)
 {
-  (void)wiringPiSetup () ;
+  if (wiringPiSetup () < 0) return -1;
 
   if (wiringPiDebug)
     printf ("wiringPi: wiringPiSetupGpio called\n") ;
@@ -4021,7 +4091,7 @@ int wiringPiSetupGpio (void)
 
 int wiringPiSetupPhys (void)
 {
-  (void)wiringPiSetup () ;
+  if (wiringPiSetup () < 0) return -1;
 
   if (wiringPiDebug)
     printf ("wiringPi: wiringPiSetupPhys called\n") ;
@@ -4044,6 +4114,7 @@ int wiringPiSetupPinType (enum WPIPinType pinType) {
 
 
 int wiringPiSetupGpioDevice (enum WPIPinType pinType) {
+  if (h618Detected()) return wiringPiSetupPinType(pinType);
  if (wiringPiSetuped)
     return 0 ;
   if (wiringPiDebug) {
