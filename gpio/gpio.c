@@ -920,6 +920,10 @@ static void doVersion (char *argv [])
   piBoardId (&model, &rev, &mem, &maker, &warranty) ;
 
   printf ("Hardware details:\n") ;
+  if (model == PI_MODEL_ORANGEPI_ZERO_2W)
+    printf ("  Type: %s, Revision: unknown, Memory: unknown, Maker: %s\n",
+        piModelNames [model], piMakerNames [maker]) ;
+  else
   printf ("  Type: %s, Revision: %s, Memory: %dMB, Maker: %s %s\n", 
       piModelNames [model], piRevisionNames [rev], piMemorySize [mem], piMakerNames [maker], warranty ? "[Out of Warranty]" : "") ;
 
@@ -939,6 +943,13 @@ static void doVersion (char *argv [])
       fclose (fd) ;
       printf ("      Model: %s\n", name) ;
     }
+  }
+
+  if (model == PI_MODEL_ORANGEPI_ZERO_2W) {
+    printf ("  * GPIO backend: Linux character-device ABI v2 (/dev/gpiochip*).\n") ;
+    printf ("  * Device permissions determine access; no /dev/mem or /dev/gpiomem used.\n") ;
+    printf ("  * Run gpio readall to check controller discovery without requesting lines.\n") ;
+    return ;
   }
 
   int bGlobalAccess = wiringPiGlobalMemoryAccess();		// User level GPIO is GO

@@ -120,7 +120,24 @@ compatibility check, **not a boot or electrical test**. Both x86-64 and AArch64
 library/CLI builds were checked. The AArch64 mock integration test and CLI help
 also ran under QEMU with no GPIO hardware access. These do not prove signal levels.
 
-After first boot, start with `gpio -v` and `gpio readall`. For a controlled loopback,
+The same image subsequently booted on the user's board. Native library/devLib/CLI
+builds, ASan/UBSan mock regressions and the Raspberry Pi revision-decoding tests
+passed on 2026-10-26. Actual `gpio readall` discovered `gpiochip1` with label
+`300b000.pinctrl` and 288 unnamed lines; it printed all 40 header positions
+without requesting GPIO lines. Physical 8/10 were reported busy. The other chip
+is `7022000.pinctrl` with 32 lines and was not selected. No spidev device nodes
+were present; I2C adapter 0 was R-I2C at `7081400`, and adapter 1 was HDMI.
+
+Board testing exposed and fixed an identity-display bug: the upstream
+`PI_MAKER_UNKNOWN` value actually indexes “Sony Japan”. H618 now has a separate
+Xunlong maker value outside the Raspberry Pi revision field; existing Raspberry
+Pi maker indices remain unchanged. `gpio -v` prints unknown revision/RAM honestly
+and describes the character-device backend without invoking the unsupported
+Raspberry Pi descriptor API. The existing `WIRINGPI_FORCE_REVISION` test hook
+still exercises Raspberry Pi identity decoding on H618; it does not change GPIO
+backend detection or pin mapping.
+
+Start with `gpio -v` and `gpio readall`. For a controlled loopback,
 disconnect devices from physical pins 37 and 29, connect them through 1 kOhm,
 and compile/run `wiringPi/test/wiringpi_test_h618_loopback.c`. It owns only those
 two lines, checks 20 alternating levels and releases them. It has not yet run

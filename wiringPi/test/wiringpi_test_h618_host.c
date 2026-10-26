@@ -8,6 +8,7 @@
 #include <stdarg.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include "wiringPi.h"
 #include "wiringPiH618.h"
@@ -107,6 +108,16 @@ int main(void) {
   piBoardId(&model, &rev, &mem, &maker, &warranty);
   assert(model == PI_MODEL_ORANGEPI_ZERO_2W);
   assert(!strcmp(piModelNames[model], "Orange Pi Zero 2W"));
+  assert(maker == PI_MAKER_XUNLONG && !strcmp(piMakerNames[maker], "Xunlong"));
+  assert(piMemorySize[mem] == 0);
+  setenv("WIRINGPI_FORCE_REVISION", "a32082", 1);
+  piBoardId(&model, &rev, &mem, &maker, &warranty);
+  assert(model == PI_MODEL_3B && maker == 3);
+  assert(!strcmp(piMakerNames[maker], "Sony Japan"));
+  assert(h618Detected()); /* The test hook must not change hardware dispatch. */
+  unsetenv("WIRINGPI_FORCE_REVISION");
+  piBoardId(&model, &rev, &mem, &maker, &warranty);
+  assert(model == PI_MODEL_ORANGEPI_ZERO_2W && maker == PI_MAKER_XUNLONG);
   assert(wiringPiSetup() == 0);
   assert(wpiPinToGpio(0) == 264 && physPinToGpio(3) == 264);
   pinMode(0, OUTPUT); digitalWrite(0, 1); assert(digitalRead(0) == 1);

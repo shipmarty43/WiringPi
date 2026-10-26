@@ -149,7 +149,8 @@ enum PI_MAKER {
   PI_MAKER_SONY    = 0,
   PI_MAKER_EGOMAN  = 1,
   PI_MAKER_EMBEST  = 2,
-  PI_MAKER_UNKNOWN = 3
+  PI_MAKER_UNKNOWN = 3,
+  PI_MAKER_XUNLONG = 16 /* Outside the Raspberry Pi revision manufacturer field. */
 };
 
 enum GPIO_LAYOUT {
@@ -160,7 +161,7 @@ enum GPIO_LAYOUT {
 extern const char *piModelNames    [PI_MODELS_MAX];
 extern const char *piProcessor     [ 5] ;
 extern const char *piRevisionNames [16] ;
-extern const char *piMakerNames    [16] ;
+extern const char *piMakerNames    [17] ;
 extern int         piMemorySize    [ 8] ;
 
 

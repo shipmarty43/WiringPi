@@ -414,7 +414,7 @@ const char *piRevisionNames [16] =
   "15",
 } ;
 
-const char *piMakerNames [16] =
+const char *piMakerNames [17] =
 {
   "Sony UK",    //	 0
   "Egoman",	    //	 1
@@ -432,6 +432,7 @@ const char *piMakerNames [16] =
   "Unknown13",	//	13
   "Unknown14",	//	14
   "Unknown15",	//	15
+  "Xunlong",   // 16: Orange Pi; not a Raspberry Pi revision code
 } ;
 
 int piMemorySize [8] =
@@ -1226,9 +1227,11 @@ unsigned int GetPiRAM (void) {
 
 void piBoardId (int *model, int *rev, int *mem, int *maker, int *warranty)
 {
-  if (h618Detected()) {
+  /* Preserve the existing revision-decoder test hook on non-Raspberry Pi hosts.
+   * Actual GPIO dispatch continues to use h618Detected(), not this override. */
+  if (getenv(ENV_FORCE_REVISION) == NULL && h618Detected()) {
     *model = PI_MODEL_ORANGEPI_ZERO_2W;
-    *rev = 0; *mem = 7; *maker = PI_MAKER_UNKNOWN; *warranty = 0;
+    *rev = 0; *mem = 7; *maker = PI_MAKER_XUNLONG; *warranty = 0;
     piMemorySize[7] = 0; /* Unknown; do not fabricate RAM size. */
     RaspberryPiModel = *model;
     RaspberryPiLayout = GPIO_LAYOUT_DEFAULT;
