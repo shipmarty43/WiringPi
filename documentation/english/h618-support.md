@@ -240,8 +240,55 @@ GPIO: FD 0, failed thread/request cleanup, callback self-stop rejection, queue
 overflow, waveform stop, timeout and external cancellation of a wait/measurement.
 ASan/UBSan regressions passed on both x86-64 and the board's AArch64 CPU.
 
-Hardware PWM remains unimplemented and untested. This image exposes six kernel
-PWM channels; PWM5 is already owned by a kernel consumer. Header PWM1 is PI11
-(physical 32), requiring the appropriate kernel pinctrl/overlay configuration.
-The owner kept the resistor on 37-to-29, so no PWM1 routing or output was enabled.
-Do not treat software PWM results as validation of the hardware PWM controller.
+Hardware PWM library dispatch (`pinMode(PWM_OUTPUT)`, `pwmWrite`, `pwmSetClock`,
+etc.) remains unimplemented. The kernel PWM controller was subsequently tested
+separately as described below; software PWM results alone do not validate it.
+
+### Kernel hardware PWM1 loopback validation
+
+Later on 2026-10-26 the owner confirmed moving the 1 kOhm resistor to physical
+**32 (PI11/PWM1) and 29 (PI0/input)**, with other devices disconnected, and
+authorized the stock `pwm1-pi11` overlay and reboot. The original boot environment
+was backed up; `overlays=pwm1-pi11` was added with
+`overlay_prefix=sun50i-h616`. Offline overlay application checked PI11/pwm1 and
+the live device tree after reboot confirmed the route. No raw MMIO was used.
+
+Controller: device `300a000.pwm`, driver `sunxi_pwm`, six channels. The test
+discovers `pwmchipN` from this device and driver rather than assuming chip 0.
+PWM5 belongs to `ac300-clk` and was not changed. Only channel 1 was exported.
+
+| Requested frequency | Measured frequency | Duty cycles | Result |
+|---:|---:|---|---|
+| 10 Hz | 10 Hz | 25%, 50%, 75% | Passed |
+| 100 Hz | 100 Hz | 25%, 50%, 75% | Passed |
+| 1000 Hz | 999–1000 Hz | 25%, 50%, 75% | Passed |
+
+HIGH/LOW pulse widths passed a tolerance of max(5%, 50 microseconds); frequency
+passed max(2%, 1 Hz). At 1000 Hz, HIGH widths were approximately 243, 488 and
+731 microseconds for the three duty settings. GPIO kernel IRQ timestamps include
+interrupt latency, so these measurements are not oscilloscope specifications.
+0% and 100% duty were also read back as stable LOW and HIGH on physical 29.
+
+Repeat only with the confirmed wiring and overlay:
+
+```sh
+cc -Wall -Wextra -Werror -IwiringPi \
+  wiringPi/test/wiringpi_test_h618_pwm_input.c wiringPi/libwiringPi.so.3.20 \
+  -lpthread -o /tmp/h618-pwm-input
+sudo env LD_LIBRARY_PATH="$PWD/wiringPi" python3 \
+  wiringPi/test/wiringpi_test_h618_pwm.py --confirm-32-to-29 /tmp/h618-pwm-input
+```
+
+The input probe never drives a GPIO. The Python harness verifies board, DT
+routing and controller identity, refuses an already exported channel, and
+disables/unexports its PWM in cleanup. SIGKILL/power loss cannot execute userspace
+cleanup; do not use this test as an unattended PWM service. Final sysfs/debugfs
+inspection confirmed PWM1 disabled and unexported, GPIO input 29 unclaimed,
+and PWM5 unchanged. PI11 remains assigned to the PWM1 pinctrl consumer while the
+overlay is enabled; it is not available as an ordinary GPIO even after unexport.
+
+The overlay remains enabled on the test board. To return PI11 to normal GPIO,
+remove only `pwm1-pi11` from the `overlays=` list and reboot. If no intervening
+boot configuration edits have occurred, restoring the saved original environment
+is also an option. Other PWM channels, polarity inversion, driver suspend/resume
+and WiringPi's legacy hardware-PWM API are not validated by this test.
