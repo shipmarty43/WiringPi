@@ -33,10 +33,14 @@ layout and does not substitute Allwinner addresses into BCM register code.
 - `softPwmCreate/Write/Stop`, `softToneCreate/Write/Stop`, and
   `pinMode(SOFT_PWM_OUTPUT/SOFT_TONE_OUTPUT)`, using cancellable worker threads.
 - `pulseInNS`, `pulseIn`, `frequencyIn`, using kernel edge timestamps.
+- PWM1 on physical 32 / PI11: `pinMode(PWM_OUTPUT/PM_OFF)`, `pwmWrite`,
+  `pwmSetMode(PWM_MODE_MS)`, `pwmSetRange`, `pwmSetPinRange`,
+  `pwmSetChannelRange(1, ...)` and `pwmSetClock`; see the contract below.
 
 Unsupported operations return -1 where available (void APIs report an error and
 set `errno=ENOTSUP`; unsigned byte APIs return 0 with ENOTSUP): alternate
-function writes, pad drive, hardware PWM/clock, the deprecated
+function writes, pad drive, general-purpose clock output, balanced PWM, hardware
+PWM tone, unvalidated PWM channels, the deprecated
 `waitForInterrupt` (use `waitForInterrupt2`), Pi-specific byte operations and
 onboard ADC.
 These are **not** advertised as working H618 implementations. Peripheral mux,
@@ -66,14 +70,18 @@ are reported as EOVERFLOW on stop instead of silently accepting lost edges.
 legacy field name; timestamps use the kernel's monotonic clock. Rising, falling
 and both-edge modes are supported; INT_EDGE_SETUP is not. Debounce is requested
 from the kernel and unsupported settings propagate errors. `getAlt` currently
-reports only ordinary digital-I/O requests, not worker-owned lines.
+reports only ordinary digital-I/O requests, not worker-owned or hardware PWM lines.
 
 Software PWM uses 100 microseconds per range unit (range 100 nominally 100 Hz).
 Tone clamps frequency to 0..5000 Hz; zero holds LOW. These are scheduler-dependent
 signals, not precision hardware PWM. `pulseIn*` measures the next complete pulse;
 `frequencyIn` estimates frequency between first and last rising edges in the
 requested window. Timeouts or insufficient edges return zero with errno zero;
-errors return zero with errno set. Kernel timestamps improve measurement over
+errors return zero with errno set. Measurements discard the first IRQ event: on
+the tested sunxi kernel, enabling an edge IRQ while high can report an initial
+event during an already-running pulse. Only subsequent edges are measured. Allow timeout for synchronization plus a
+complete pulse period.
+Kernel timestamps improve measurement over
 userspace polling but do not establish electrical timing accuracy.
 
 ## Header map and kernel discovery
@@ -240,9 +248,9 @@ GPIO: FD 0, failed thread/request cleanup, callback self-stop rejection, queue
 overflow, waveform stop, timeout and external cancellation of a wait/measurement.
 ASan/UBSan regressions passed on both x86-64 and the board's AArch64 CPU.
 
-Hardware PWM library dispatch (`pinMode(PWM_OUTPUT)`, `pwmWrite`, `pwmSetClock`,
-etc.) remains unimplemented. The kernel PWM controller was subsequently tested
-separately as described below; software PWM results alone do not validate it.
+At this stage hardware PWM library dispatch was not implemented. The kernel
+PWM controller was tested separately below; the subsequent 2026-10-27 section
+records the new public library implementation and its acceptance.
 
 ### Kernel hardware PWM1 loopback validation
 
@@ -291,4 +299,113 @@ The overlay remains enabled on the test board. To return PI11 to normal GPIO,
 remove only `pwm1-pi11` from the `overlays=` list and reboot. If no intervening
 boot configuration edits have occurred, restoring the saved original environment
 is also an option. Other PWM channels, polarity inversion, driver suspend/resume
-and WiringPi's legacy hardware-PWM API are not validated by this test.
+are not validated by this test. Public API acceptance follows below.
+
+
+### Public hardware PWM1 API — 2026-10-27
+
+`wiringPiH618Pwm.c` implements an isolated kernel PWM backend. It requires the
+verified stock `pwm1-pi11` device-tree route, the `300a000.pwm` device with the
+`sunxi_pwm` driver and six channels. It discovers `pwmchipN`; it does not assume
+chip 0, enable overlays or configure mux registers. Unknown DT/driver layouts
+return ENODEV. Only channel 1 / physical 32 / sunxi 267 / wPi 21 is supported.
+PWM5 (`ac300-clk`, Ethernet clock) is never written.
+
+The existing API uses a **logical 24 MHz tick**, not Raspberry Pi's 19.2 MHz:
+`frequency = 24000000 / (divisor * range)`. `pwmSetClock` selects this logical
+divisor (1..4095); the kernel chooses its actual clocks/dividers. Periods are
+bounded by the backend to 1 microsecond..1 second; these are API bounds, not
+measured hardware limits. Default range/divisor are 1024/32. Only mark-space
+mode is supported; balanced mode and `pwmToneWrite` fail with ENOTSUP.
+
+```c
+wiringPiSetupPhys();
+pwmSetMode(PWM_MODE_MS);
+pwmSetClock(1);
+pwmSetRange(24000);       // 1 kHz
+pinMode(32, PWM_OUTPUT);  // export owned PWM1, start at 0% duty
+pwmWrite(32, 6000);       // 25%
+// ... hold the process alive ...
+pinMode(32, PM_OFF);      // disable and unexport only this process's PWM1
+```
+
+Check `errno` immediately after each void call; this backend clears it on PWM
+success and preserves it across diagnostics on failure. Values outside 0..range
+are rejected. Lowering the range below the current value fails; set duty to zero
+first. Set range/clock in an order that keeps each intermediate period within
+bounds. Sysfs read-back describes requested state, not calibrated signal timing.
+
+Export is the ownership boundary. An already-exported channel is refused,
+including stale exports after SIGKILL. Never remove one without identifying its
+owner. Normal `h618Close()`/process exit and `PM_OFF` clean up owned PWM1;
+SIGKILL cannot run cleanup. A forked child cannot release its parent's channel;
+use exec after fork, and do not fork while library threads hold locks. Sysfs is
+not an exclusive file-descriptor lease: other privileged tools must cooperate.
+No idle voltage is guaranteed after unexport. A 0% duty **enabled** PWM is used
+when a stable LOW is requested.
+
+Period/duty updates use disable → zero duty → period → duty → enable, and may
+introduce a gap. They are not glitch-free atomic waveform changes. I/O failures
+attempt to disable the channel, return failure and keep it available for explicit
+cleanup. Mainline PWM interfaces with a different DT layout require separate
+qualification. See [Linux PWM documentation](https://docs.kernel.org/driver-api/pwm.html).
+
+The real public-API test passed 10/100/1000 Hz, 25/50/75% duty, stable 0/100%
+levels, and physical/native/wPi numbering transitions. The first trial revealed
+partial initial-pulse measurements (48.8 ms instead of 75 ms); discarding the
+activation event fixed this and is covered by a fake-event regression. No timing
+tolerance was relaxed. Test command, from the repository root:
+
+```sh
+cc -Wall -Wextra -Werror -IwiringPi \
+  wiringPi/test/wiringpi_test_h618_pwm_api.c wiringPi/libwiringPi.so.3.20 \
+  -lpthread -o /tmp/h618-pwm-api
+sudo env LD_LIBRARY_PATH="$PWD/wiringPi" \
+  /tmp/h618-pwm-api --confirm-32-to-29
+```
+
+Run only with physical 32 → 1 kOhm → 29, no other devices on those contacts.
+Portable fake-sysfs tests cover routing rejection, another owner's export,
+invalid values, overflow, start/update I/O failures, child-process cleanup and
+resource release. Remaining API work includes protocol/device acceptance,
+other wired channels, hardware tone, and timing qualification above 1 kHz with
+external equipment. This is not full validation of every library function.
+
+### SPI resource regression — 2026-10-27
+
+The explicit Linux bus/CS API remains portable rather than H618-specific.
+Repeated setup now closes the old library-owned descriptor. If opening a new
+handle fails, the existing handle is retained. Once setup starts changing kernel
+parameters, the old handle is retired; any failed mode/BPW/speed ioctl closes the
+new handle and leaves the cache empty. The device itself may already be partially
+reconfigured, so callers must perform a fresh successful setup before transferring.
+No claim of transactional hardware rollback is made.
+
+Descriptors use `O_CLOEXEC`. Nonpositive speeds, nonpositive transfer lengths and
+NULL transfer buffers are rejected before I/O. Setup/transfer/close must be
+serialized by the caller, and `GetFd` returns a borrowed descriptor: do not close
+it independently. Portable tests exercise all 35 bus/CS slots, ten entrypoints,
+all setup ioctl failures, reconfiguration, open failure and balanced open/close
+counts. These do not replace real SPI exchange or signal validation on the board.
+
+### Serial API and PTY regression — 2026-10-27
+
+`serialOpen` now checks terminal setup and modem-control errors, closes the FD on
+failure and uses CLOEXEC. Unsupported modem controls (ENOTTY, including PTYs)
+are tolerated without reading an uninitialized status word. Other modem errors
+are reported. Raw 8N1 disables inherited hardware flow control. Invalid baud
+retains the legacy -2 return and sets EINVAL.
+
+`serialPuts` and `serialPutchar` complete partial writes and retry EINTR instead
+of silently truncating output; void-call errors retain errno. `serialGetchar`
+retries EINTR. The existing ten-second default read timeout and bounded
+`serialPrintf` buffer remain unchanged.
+
+A real Linux PTY test covers all eight serial APIs, binary 0x00/0xff reception,
+partial/interrupted transmit, baud/termios state, CLOEXEC, flush, timeout and FD
+release. Injected termios and modem-control failures also return errors without
+leaks. This validates the userspace API on x86-64/AArch64; a PTY does not establish
+H618 UART routing, physical baud accuracy or exchange with a GPS/device.
+
+[Retained 2026-10-27 logs and tested source hashes](h618-validation-2026-10-27/)
+include the failed initial measurement and the final successful public API run.

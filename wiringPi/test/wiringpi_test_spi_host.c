@@ -16,19 +16,22 @@
 
 static int nextFd = 100, lastClosed = -1, calls, failOpen;
 static unsigned long failRequest;
+static int opened, closed;
 static char openedPath[64];
 static unsigned int seenMode, seenSpeed, seenBits;
 
 int wpi_test_open(const char *path, int flags, ...) {
   ++calls;
-  CHECK(flags == O_RDWR);
+  CHECK(flags == (O_RDWR | O_CLOEXEC));
   snprintf(openedPath, sizeof(openedPath), "%s", path);
   if (failOpen) { errno = ENOENT; return -1; }
+  ++opened;
   return nextFd++;
 }
 
 int wpi_test_close(int fd) {
   ++calls;
+  ++closed;
   lastClosed = fd;
   return 0;
 }
@@ -128,6 +131,32 @@ int main(void) {
   CHECK(wiringPiSPIxSetup(1, 0, 500000) == -1);
   CHECK(wiringPiSPIxGetFd(1, 0) == -1);
   failOpen = 0;
+  CHECK(opened == closed);
+  /* Each failed setup stage closes the new descriptor, leaving no stale cache. */
+  const unsigned long stages[] = {SPI_IOC_WR_MODE, SPI_IOC_WR_BITS_PER_WORD, SPI_IOC_WR_MAX_SPEED_HZ};
+  for (unsigned i=0; i<3; ++i) {
+    failRequest = stages[i];
+    CHECK(wiringPiSPIxSetupMode(1,0,1000000,0) == -1 && errno == EIO);
+    CHECK(wiringPiSPIxGetFd(1,0) == -1 && opened == closed);
+  }
+  failRequest=0;
+  int first=wiringPiSPIxSetupMode(1,0,1000000,0);
+  int second=wiringPiSPIxSetupMode(1,0,500000,1);
+  CHECK(first >= 0 && second > first && lastClosed == first);
+  CHECK(opened == closed+1 && wiringPiSPIxGetFd(1,0) == second);
+  before=calls;
+  CHECK(wiringPiSPIxDataRW(1,0,NULL,3) == -EINVAL);
+  CHECK(wiringPiSPIxDataRW(1,0,data,-1) == -EINVAL);
+  CHECK(wiringPiSPIxDataRW(1,0,data,0) == -EINVAL);
+  CHECK(wiringPiSPIxSetupMode(1,0,0,0) == -EINVAL);
+  CHECK(wiringPiSPIxSetupMode(1,0,-100,0) == -EINVAL);
+  CHECK(calls == before && wiringPiSPIxGetFd(1,0) == second);
+  failOpen=1;
+  CHECK(wiringPiSPIxSetupMode(1,0,1000000,0) == -1);
+  CHECK(wiringPiSPIxGetFd(1,0) == second && opened == closed+1);
+  failOpen=0; failRequest=SPI_IOC_WR_MAX_SPEED_HZ;
+  CHECK(wiringPiSPIxSetupMode(1,0,1000000,0) == -1 && errno == EIO);
+  CHECK(wiringPiSPIxGetFd(1,0) == -1 && opened == closed);
   puts("SPI host tests passed: all 10 public SPI entry points; no hardware accessed.");
   return 0;
 }

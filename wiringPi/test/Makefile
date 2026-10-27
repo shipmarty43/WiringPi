@@ -15,21 +15,28 @@ host-test:
 	  ../wiringPiSPI.c wiringpi_test_spi_host.c -o "$$tmpdir/spi-test"; \
 	"$$tmpdir/spi-test"; \
 	$(CC) -g -Wall -Wextra -Werror $(HOST_TEST_SANITIZERS) -I.. \
+	  ../wiringSerial.c wiringpi_test_serial_pty.c -Wl,--wrap=write,--wrap=ioctl,--wrap=tcgetattr,--wrap=tcsetattr -o "$$tmpdir/serial-test"; \
+	timeout 10 "$$tmpdir/serial-test"; \
+	$(CC) -g -Wall -Wextra -Werror $(HOST_TEST_SANITIZERS) -I.. \
 	  -Dopen=wpi_test_open -Dclose=wpi_test_close -Dioctl=wpi_test_ioctl \
 	  -Dglob=wpi_test_glob -Dglobfree=wpi_test_globfree \
-	  ../wiringPiH618.c ../wiringPiH618Threads.c wiringpi_test_h618_host.c -lpthread -o "$$tmpdir/h618-test"; \
+	  ../wiringPiH618.c ../wiringPiH618Threads.c ../wiringPiH618Pwm.c wiringpi_test_h618_host.c -lpthread -o "$$tmpdir/h618-test"; \
 	"$$tmpdir/h618-test"; \
 	$(CC) -g -Wall $(HOST_TEST_SANITIZERS) -I.. -D_GNU_SOURCE -DWPI_INTEGRATION \
 	  -Dopen=wpi_test_open -Dclose=wpi_test_close -Dioctl=wpi_test_ioctl \
 	  -Dglob=wpi_test_glob -Dglobfree=wpi_test_globfree \
-	  ../wiringPiH618.c ../wiringPiH618Threads.c wiringpi_test_h618_host.c ../wiringPi.c \
+	  ../wiringPiH618.c ../wiringPiH618Threads.c ../wiringPiH618Pwm.c wiringpi_test_h618_host.c ../wiringPi.c \
 	  ../wiringPiLegacy.c ../softPwm.c ../softTone.c ../piHiPri.c ../../gpio/h618.c \
 	  -Wl,--wrap=h618Detected -lpthread -lm -o "$$tmpdir/h618-integration"; \
 	"$$tmpdir/h618-integration"; \
 	$(CC) -g -Wall -Wextra -Werror $(HOST_TEST_SANITIZERS) -I.. \
 	  -Dioctl=worker_ioctl ../wiringPiH618Threads.c wiringpi_test_h618_workers.c \
 	  -Wl,--wrap=pthread_create -lpthread -o "$$tmpdir/h618-workers"; \
-	"$$tmpdir/h618-workers"
+	"$$tmpdir/h618-workers"; \
+	$(CC) -g -Wall -Wextra -Werror $(HOST_TEST_SANITIZERS) -I.. \
+	  -DH618_PWM_DT=\"$$tmpdir/dt\" -DH618_PWM_SYSFS=\"$$tmpdir/pwm\" \
+	  wiringpi_test_h618_pwm_host.c -lpthread -o "$$tmpdir/h618-pwm"; \
+	"$$tmpdir/h618-pwm"
 
 pwmtests = wiringpi_test0_version wiringpi_test8_pwm wiringpi_test81_pwm
 

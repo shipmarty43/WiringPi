@@ -271,11 +271,15 @@ struct WPIWfiStatus h618Wait(int pin, int edge, int ms, unsigned long debounce) 
 
 /* Kernel timestamps, not userspace scheduling, determine measured durations. */
 struct measurement {
-  int fd, frequency, level;
+  int fd, frequency, level, primed;
   uint64_t first, last, count, width;
 };
 static void measured(const struct gpio_v2_line_event *ev, void *data) {
   struct measurement *m=data;
+  /* Enabling a sunxi edge IRQ while the input is high can report an initial
+   * event at request time. Discard it so a partial first pulse cannot become
+   * a measured width or bias the frequency interval. */
+  if (!m->primed) { m->primed=1; return; }
   if (m->frequency) {
     if (!m->count) m->first=ev->timestamp_ns;
     m->last=ev->timestamp_ns; ++m->count;

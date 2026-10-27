@@ -1,0 +1,10 @@
+requested_hz=10 percent=25 measured_hz=9 high_ns=24993477 low_ns=75012222
+requested_hz=10 percent=50 measured_hz=10 high_ns=49993412 low_ns=49988454
+requested_hz=10 percent=75 measured_hz=9 high_ns=75013764 low_ns=24989560
+requested_hz=100 percent=25 measured_hz=100 high_ns=2502289 low_ns=7507910
+requested_hz=100 percent=50 measured_hz=99 high_ns=5005037 low_ns=5005079
+requested_hz=100 percent=75 measured_hz=99 high_ns=7507618 low_ns=2501997
+requested_hz=1000 percent=25 measured_hz=1000 high_ns=242833 low_ns=762708
+requested_hz=1000 percent=50 measured_hz=1000 high_ns=517958 low_ns=487041
+requested_hz=1000 percent=75 measured_hz=1000 high_ns=762999 low_ns=243458
+PASS: PWM public API 10/100/1000 Hz, 0/25/50/75/100%, physical/native/WPi numbering; released

@@ -21,6 +21,7 @@
  */
 
 #include <stdio.h>
+#include <errno.h>
 #include <stdlib.h>
 #include <stdint.h>
 #include <stdarg.h>
@@ -81,25 +82,28 @@ int serialOpen (const char *device, const int baud)
     case 4000000:	myBaud = B4000000 ; break ;
 
     default:
+      errno = EINVAL;
       return -2 ;
   }
 
-  if ((fd = open (device, O_RDWR | O_NOCTTY | O_NDELAY | O_NONBLOCK)) == -1)
+  if (!device) { errno = EINVAL; return -1; }
+  if ((fd = open (device, O_RDWR | O_NOCTTY | O_NDELAY | O_NONBLOCK | O_CLOEXEC)) == -1)
     return -1 ;
 
-  fcntl (fd, F_SETFL, O_RDWR) ;
+  int flags = fcntl(fd, F_GETFL);
+  if (flags < 0 || fcntl(fd, F_SETFL, flags & ~O_NONBLOCK) < 0) goto failed;
 
 // Get and modify current options:
 
-  tcgetattr (fd, &options) ;
+  if (tcgetattr(fd, &options) < 0) goto failed;
 
     cfmakeraw   (&options) ;
-    cfsetispeed (&options, myBaud) ;
-    cfsetospeed (&options, myBaud) ;
+    if (cfsetispeed(&options, myBaud) < 0 || cfsetospeed(&options, myBaud) < 0) goto failed;
 
     options.c_cflag |= (CLOCAL | CREAD) ;
     options.c_cflag &= ~PARENB ;
     options.c_cflag &= ~CSTOPB ;
+    options.c_cflag &= ~CRTSCTS ;
     options.c_cflag &= ~CSIZE ;
     options.c_cflag |= CS8 ;
     options.c_lflag &= ~(ICANON | ECHO | ECHOE | ISIG) ;
@@ -108,18 +112,25 @@ int serialOpen (const char *device, const int baud)
     options.c_cc [VMIN]  =   0 ;
     options.c_cc [VTIME] = 100 ;	// Ten seconds (100 deciseconds)
 
-  tcsetattr (fd, TCSANOW, &options) ;
+  if (tcsetattr(fd, TCSANOW, &options) < 0) goto failed;
 
-  ioctl (fd, TIOCMGET, &status);
-
-  status |= TIOCM_DTR ;
-  status |= TIOCM_RTS ;
-
-  ioctl (fd, TIOCMSET, &status);
+  /* PTYs and UARTs without modem controls may report ENOTTY. Never use an
+   * uninitialized status word when TIOCMGET fails. Other failures are real. */
+  if (ioctl(fd, TIOCMGET, &status) == 0) {
+    status |= TIOCM_DTR | TIOCM_RTS;
+    if (ioctl(fd, TIOCMSET, &status) < 0) goto failed;
+  } else if (errno != ENOTTY) goto failed;
 
   usleep (10000) ;	// 10mS
 
+  errno = 0;
   return fd ;
+failed: {
+  int saved = errno;
+  close(fd);
+  errno = saved;
+  return -1;
+}
 }
 
 
@@ -153,14 +164,24 @@ void serialClose (const int fd)
  *********************************************************************************
  */
 
+static void serialWriteAll(int fd, const char *data, size_t len) {
+  while (len) {
+    ssize_t n = write(fd, data, len);
+    if (n < 0 && errno == EINTR) continue;
+    if (n <= 0) {
+      int saved = n < 0 ? errno : EIO;
+      fprintf(stderr, "wiringPi: serial write failed: %s\n", strerror(saved));
+      errno = saved;
+      return;
+    }
+    data += n; len -= (size_t)n;
+  }
+  errno = 0;
+}
 void serialPutchar(const int fd, const unsigned char c)
 {
-    ssize_t bytes_written = write(fd, &c, 1);
-    if (bytes_written != 1) {
-      perror("Error writing to file descriptor");
-    }
+  serialWriteAll(fd, (const char *)&c, 1);
 }
-
 
 /*
  * serialPuts:
@@ -170,11 +191,8 @@ void serialPutchar(const int fd, const unsigned char c)
 
 void serialPuts(const int fd, const char *s)
 {
-    size_t len = strlen(s);
-    ssize_t bytes_written = write(fd, s, len);
-    if (bytes_written != (ssize_t)len) {
-      perror("Error writing to file descriptor");
-    }
+  if (!s) { errno = EINVAL; return; }
+  serialWriteAll(fd, s, strlen(s));
 }
 
 /*
@@ -225,7 +243,9 @@ int serialGetchar (const int fd)
 {
   uint8_t x ;
 
-  if (read (fd, &x, 1) != 1)
+  ssize_t n;
+  do { n = read(fd, &x, 1); } while (n < 0 && errno == EINTR);
+  if (n != 1)
     return -1 ;
 
   return ((int)x) & 0xFF ;

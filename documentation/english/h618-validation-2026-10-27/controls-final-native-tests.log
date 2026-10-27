@@ -1,0 +1,69 @@
+make: Entering directory '<validation>/WiringPi/wiringPi/test'
+wiringPi: serial write failed: Bad file descriptor
+Serial PTY tests passed: all 8 APIs, 8N1, binary RX, partial/EINTR TX, flush, timeout, cleanup
+wiringPiSPI: Invalid SPI number/channel (need wiringPiSPIxSetupMode before read/write)wiringPiSPI: Invalid mode (-1, valid range 0-3)wiringPiSPI: Invalid mode (4, valid range 0-3)wiringPiSPI: Invalid SPI number  (-1, valid range 0-6)wiringPiSPI: Invalid SPI number  (-1, valid range 0-6)wiringPiSPI: Invalid SPI number  (-1, valid range 0-6)wiringPiSPI: Invalid SPI number  (-1, valid range 0-6)wiringPiSPI: Invalid SPI number  (7, valid range 0-6)wiringPiSPI: Invalid SPI number  (7, valid range 0-6)wiringPiSPI: Invalid SPI number  (7, valid range 0-6)wiringPiSPI: Invalid SPI number  (7, valid range 0-6)wiringPiSPI: Invalid SPI channel (-1, valid range 0-4)wiringPiSPI: Invalid SPI channel (-1, valid range 0-4)wiringPiSPI: Invalid SPI channel (-1, valid range 0-4)wiringPiSPI: Invalid SPI channel (-1, valid range 0-4)wiringPiSPI: Invalid SPI channel (5, valid range 0-4)wiringPiSPI: Invalid SPI channel (5, valid range 0-4)wiringPiSPI: Invalid SPI channel (5, valid range 0-4)wiringPiSPI: Invalid SPI channel (5, valid range 0-4)SPI host tests passed: all 10 public SPI entry points; no hardware accessed.
+wiringPi: serial write failed: Bad file descriptor
+Serial PTY tests passed: all 8 APIs, 8N1, binary RX, partial/EINTR TX, flush, timeout, cleanup
+H618 host tests passed
+wiringPi: pwmWrite: Operation not supported
+wiringPi: H618 GPIO setup: No such device
+Orange Pi Zero 2W / H618 — 40-pin header
+ Phys  wPi  sunxi  Name  GPIO state / consumer
+    1    -      -  3.3V
+    2    -      -  5V
+    3    0    264  PI8   USED / spi1
+    4    -      -  5V
+    5    1    263  PI7   USED / spi1
+    6    -      -  GND
+    7    2    269  PI13  USED / spi1
+    8    3    224  PH0   USED / spi1
+    9    -      -  GND
+   10    4    225  PH1   USED / spi1
+   11    5    226  PH2   USED / spi1
+   12    6    257  PI1   USED / spi1
+   13    7    227  PH3   USED / spi1
+   14    -      -  GND
+   15    8    261  PI5   USED / spi1
+   16    9    270  PI14  USED / spi1
+   17    -      -  3.3V
+   18   10    228  PH4   USED / spi1
+   19   11    231  PH7   USED / spi1
+   20    -      -  GND
+   21   12    232  PH8   USED / spi1
+   22   13    262  PI6   USED / spi1
+   23   14    230  PH6   USED / spi1
+   24   15    229  PH5   USED / spi1
+   25    -      -  GND
+   26   16    233  PH9   USED / spi1
+   27   17    266  PI10  USED / spi1
+   28   18    265  PI9   USED / spi1
+   29   19    256  PI0   USED / spi1
+   30    -      -  GND
+   31   20    271  PI15  USED / spi1
+   32   21    267  PI11  USED / spi1
+   33   22    268  PI12  USED / spi1
+   34    -      -  GND
+   35   23    258  PI2   USED / spi1
+   36   24     76  PC12  USED / spi1
+   37   25    272  PI16  USED / spi1
+   38   26    260  PI4   USED / spi1
+   39    -      -  GND
+   40   27    259  PI3   USED / spi1
+No lines requested. GPIO metadata does not expose peripheral mux or unowned voltage levels.
+H618 host tests passed
+H618 worker lifecycle tests passed (FD0, callbacks, failure cleanup, overflow, PWM/tone, timeout)
+H618 PWM lifecycle, bounds, routing, collision, fork and I/O failure tests passed
+make: Leaving directory '<validation>/WiringPi/wiringPi/test'
+make: Entering directory '<validation>/WiringPi/wiringPi'
+[Compile] wiringPiH618.c
+[Compile] wiringSerial.c
+[Compile] wiringPiSPI.c
+[Compile] mcp23s08.c
+[Compile] mcp23s17.c
+[Compile] mcp3002.c
+[Compile] mcp3004.c
+[Compile] mcp4802.c
+[Compile] max31855.c
+[Compile] max5322.c
+[Link (Dynamic)]
+make: Leaving directory '<validation>/WiringPi/wiringPi'

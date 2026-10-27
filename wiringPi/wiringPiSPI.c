@@ -116,6 +116,8 @@ int wiringPiSPIxDataRW (const int number, const int channel, unsigned char *data
     return -EBADF;
   }
 
+  if (len <= 0 || !data) return -EINVAL;
+
   struct spi_ioc_transfer spi ;
 // Mentioned in spidev.h but not used in the original kernel documentation
 //	test program )-:
@@ -148,30 +150,43 @@ int wiringPiSPIxSetupMode(const int number, const int channel, const int speed, 
   char spiDev [32] ;
 
   RETURN_ON_LIMIT_FAIL
+  if (speed <= 0) return -EINVAL;
   if (mode<0 || mode>3) { // Mode is 0, 1, 2 or 3 original
     fprintf (stderr, "wiringPiSPI: Invalid mode (%d, valid range 0-%d)", mode, 3);
     return -EINVAL;
   }
 
   snprintf (spiDev, 31, "/dev/spidev%d.%d", number, channel) ;
-  if ((fd = open (spiDev, O_RDWR)) < 0) {
+  if ((fd = open (spiDev, O_RDWR | O_CLOEXEC)) < 0) {
     return wiringPiFailure (WPI_ALMOST, "Unable to open SPI device %s: %s\n", spiDev, strerror (errno)) ;
   }
-  spiSpeeds [number][channel] = speed ;
-  spiFds    [number][channel] = fd ;
+  /* A setup ioctl changes the shared kernel device, not just this FD.
+   * Retire the old handle before changing it; a failed setup must not leave
+   * a cached descriptor with stale mode/speed assumptions. No thread may
+   * transfer or borrow GetFd concurrently with setup/close. */
+  int old = spiFds[number][channel];
+  spiFds[number][channel] = -1;
+  spiSpeeds[number][channel] = 0;
+  const char *stage = "old descriptor close";
+  if (old >= 0 && close(old) < 0) goto failed;
 
-// Set SPI parameters.
-
-  if (ioctl (fd, SPI_IOC_WR_MODE, &mode)            < 0)
-    return wiringPiFailure (WPI_ALMOST, "SPI mode change failure: %s\n", strerror (errno)) ;
-  
-  if (ioctl (fd, SPI_IOC_WR_BITS_PER_WORD, &spiBPW) < 0)
-    return wiringPiFailure (WPI_ALMOST, "SPI BPW change failure: %s\n", strerror (errno)) ;
-
-  if (ioctl (fd, SPI_IOC_WR_MAX_SPEED_HZ, &speed)   < 0)
-    return wiringPiFailure (WPI_ALMOST, "SPI speed change failure: %s\n", strerror (errno)) ;
+  stage = "mode";
+  if (ioctl(fd, SPI_IOC_WR_MODE, &mode) < 0) goto failed;
+  stage = "bits per word";
+  if (ioctl(fd, SPI_IOC_WR_BITS_PER_WORD, &spiBPW) < 0) goto failed;
+  stage = "speed";
+  if (ioctl(fd, SPI_IOC_WR_MAX_SPEED_HZ, &speed) < 0) goto failed;
+  spiSpeeds[number][channel] = speed;
+  spiFds[number][channel] = fd;
 
   return fd ;
+failed: {
+  int saved = errno;
+  close(fd);
+  int result = wiringPiFailure(WPI_ALMOST, "SPI %s change failure: %s\n", stage, strerror(saved));
+  errno = saved;
+  return result;
+}
 }
 
 

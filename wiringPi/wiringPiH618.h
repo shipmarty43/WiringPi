@@ -29,4 +29,11 @@ int h618ISR(int pin, int edge, void (*callback)(struct WPIWfiStatus, void *),
             void (*classic)(void), unsigned long debounce, void *data);
 struct WPIWfiStatus h618Wait(int pin, int edge, int ms, unsigned long debounce);
 unsigned long long h618Measure(int pin, int level, uint64_t duration, int frequency);
+void h618Error(const char *function);
+int h618PwmStart(int pin);
+int h618PwmClose(void);
+int h618PwmMode(int pin);
+int h618PwmRange(unsigned range);
+int h618PwmClock(int divisor);
+int h618PwmWrite(int pin, int value);
 #endif

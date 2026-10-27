@@ -1,0 +1,4 @@
+Loopback measurement outside IRQ timestamp tolerance
+requested_hz=10 percent=25 measured_hz=10 high_ns=24993793 low_ns=74982253
+requested_hz=10 percent=50 measured_hz=10 high_ns=49042085 low_ns=49987294
+requested_hz=10 percent=75 measured_hz=10 high_ns=48798294 low_ns=24994376

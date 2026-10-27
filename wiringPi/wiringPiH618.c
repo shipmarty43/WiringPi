@@ -87,6 +87,7 @@ int h618Map(int pin, int mode) {
 
 void h618Close(void) {
   if (h618WorkersClose() < 0 && errno == EDEADLK) return;
+  if (h618PwmClose() < 0) h618Error("wiringPi: PWM cleanup");
   pthread_mutex_lock(&lock);
   if (chip >= 0) {
     for (int i = 0; i < 28; ++i) {
@@ -211,6 +212,9 @@ static int configure(int i, uint64_t flags) {
 int h618PinMode(int pin, int mode) {
   int i = slot(pin), ret = -1;
   if (i < 0) return -1;
+  if (mode == PWM_OUTPUT) return h618PwmStart(pin);
+  if (pin == 267 && mode == PM_OFF && h618PwmClose() < 0) return -1;
+  if (h618PwmMode(pin)) { errno = EBUSY; return -1; }
   if (mode != INPUT && mode != OUTPUT && mode != PM_OFF)
     return h618Unsupported("pinMode (only INPUT, OUTPUT, PM_OFF)");
   pthread_mutex_lock(&lock);
@@ -295,4 +299,10 @@ int h618Unsupported(const char *function) {
   fprintf(stderr, "wiringPi: %s is not supported by the H618 GPIO backend\n", function);
   errno = ENOTSUP;
   return -1;
+}
+
+void h618Error(const char *function) {
+  int error = errno;
+  fprintf(stderr, "%s: %s\n", function, strerror(error));
+  errno = error;
 }

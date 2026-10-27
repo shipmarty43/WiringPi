@@ -61,6 +61,11 @@ static void *cancelled_measurement(void *unused) {
   assert(h618Measure(256,HIGH,10000000000ULL,1)==0 && errno==ECANCELED);
   return NULL;
 }
+static void *complete_pulse(void *unused) {
+  (void)unused;
+  assert(h618Measure(256,HIGH,1000000000ULL,0)==75000000 && errno==0);
+  return NULL;
+}
 int main(void) {
   int saved_stdin=dup(0); close(0);
   assert(h618ISR(256,INT_EDGE_BOTH,callback,NULL,0,&callbacks)==0);
@@ -112,6 +117,15 @@ int main(void) {
   for (int i=0;i<2000 && peer<0;++i) usleep(1000);
   assert(peer>=0);
   assert(h618WorkerStop(256,1)==0);
+  pthread_join(waiting,NULL); release_peer();
+  assert(pthread_create(&waiting,NULL,complete_pulse,NULL)==0);
+  for (int i=0;i<2000 && peer<0;++i) usleep(1000);
+  assert(peer>=0);
+  /* First rise is the activation-time event halfway through a high pulse. */
+  send_edge(1,GPIO_V2_LINE_EVENT_RISING_EDGE,50000000);
+  send_edge(2,GPIO_V2_LINE_EVENT_FALLING_EDGE,75000000);
+  send_edge(3,GPIO_V2_LINE_EVENT_RISING_EDGE,100000000);
+  send_edge(4,GPIO_V2_LINE_EVENT_FALLING_EDGE,175000000);
   pthread_join(waiting,NULL); release_peer();
   puts("H618 worker lifecycle tests passed (FD0, callbacks, failure cleanup, overflow, PWM/tone, timeout)");
 }

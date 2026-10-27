@@ -1568,7 +1568,7 @@ enum WPIPinAlt getPinModeAlt(int pin) {
 
 void pwmSetMode (int mode)
 {
-  if (h618Detected()) { h618Unsupported(__func__); return; }
+  if (h618Detected()) { if (mode != PWM_MODE_MS) h618Unsupported("pwmSetMode (only mark-space)"); else errno = 0; return; }
   if ((wiringPiMode == WPI_MODE_PINS) || (wiringPiMode == WPI_MODE_PHYS) || (wiringPiMode == WPI_MODE_GPIO))
   {
     if (piRP1Model()) {
@@ -1596,7 +1596,7 @@ void pwmSetMode (int mode)
  */
 
 void pwmSetRange (unsigned int range) {
-  if (h618Detected()) { h618Unsupported(__func__); return; }
+  if (h618Detected()) { if (h618PwmRange(range) < 0) h618Error("wiringPi: pwmSetRange"); return; }
 
   if ((wiringPiMode == WPI_MODE_PINS) || (wiringPiMode == WPI_MODE_PHYS) || (wiringPiMode == WPI_MODE_GPIO)) {
 
@@ -1662,7 +1662,7 @@ void pwmSetRange (unsigned int range) {
  */
 
 void pwmSetChannelRange (unsigned int channel, unsigned int range) {
-  if (h618Detected()) { h618Unsupported(__func__); return; }
+  if (h618Detected()) { if (channel != 1) h618Unsupported("pwmSetChannelRange (only channel 1)"); else if (h618PwmRange(range) < 0) h618Error("wiringPi: pwmSetChannelRange"); return; }
 
   if ((wiringPiMode == WPI_MODE_PINS) || (wiringPiMode == WPI_MODE_PHYS) || (wiringPiMode == WPI_MODE_GPIO)) {
 
@@ -1733,7 +1733,7 @@ void pwmSetChannelRange (unsigned int channel, unsigned int range) {
  */
 
 void pwmSetPinRange(int pin, unsigned int range)  {
-  if (h618Detected()) { h618Unsupported(__func__); return; }
+  if (h618Detected()) { if (h618CurrentPin(pin) != 267) h618Unsupported("pwmSetPinRange (only PI11)"); else if (h618PwmRange(range) < 0) h618Error("wiringPi: pwmSetPinRange"); return; }
 
   if (!ToBCMPin(&pin)) {
     return;
@@ -1786,7 +1786,7 @@ void pwmSetPinRange(int pin, unsigned int range)  {
 
 void pwmSetClock (int divisor)
 {
-  if (h618Detected()) { h618Unsupported(__func__); return; }
+  if (h618Detected()) { if (h618PwmClock(divisor) < 0) h618Error("wiringPi: pwmSetClock"); return; }
   uint32_t pwm_control ;
   if (!clk) {
       fprintf(stderr, "wiringPi: pwmSetClock but no clk memory available, ignoring\n");
@@ -2226,12 +2226,12 @@ void pinMode (int pin, int mode)
 {
   if (h618Detected() && !wiringPiFindNode(pin)) {
     int native=h618CurrentPin(pin), ret;
-    if (native < 0) { perror("wiringPi: pinMode"); return; }
+    if (native < 0) { h618Error("wiringPi: pinMode"); return; }
     if (mode == SOFT_PWM_OUTPUT) ret=h618WaveStart(native, 0, 100, 0);
     else if (mode == SOFT_TONE_OUTPUT) ret=h618WaveStart(native, 0, 0, 1);
     else if (mode == PM_OFF && h618WorkerStop(native, 0) < 0) ret=-1;
     else ret=h618PinMode(native, mode);
-    if (ret < 0) perror("wiringPi: pinMode");
+    if (ret < 0) h618Error("wiringPi: pinMode");
     return;
   }
   int    fSel, shift, alt ;
@@ -2687,7 +2687,10 @@ void digitalWrite (int pin, int value)
 
 void pwmWrite (int pin, int value)
 {
-  if (h618Detected() && !wiringPiFindNode(pin)) { h618Unsupported(__func__); return; }
+  if (h618Detected() && !wiringPiFindNode(pin)) {
+    if (h618PwmWrite(h618CurrentPin(pin), value) < 0) h618Error("wiringPi: pwmWrite");
+    return;
+  }
   struct wiringPiNodeStruct *node = wiringPiNodes ;
 
   setupCheck ("pwmWrite") ;

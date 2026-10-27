@@ -1,0 +1,19 @@
+0: platform/300a000.pwm, npwm: 6
+ pwm-0   ((null)              ):
+  requested configuration: disabled, 0/0 ns, normal polarity
+  actual configuration:    disabled, 0/0 ns, normal polarity
+ pwm-1   ((null)              ):
+  requested configuration: disabled, 0/1000000 ns, normal polarity
+  actual configuration:    disabled, 0/0 ns, normal polarity
+ pwm-2   ((null)              ):
+  requested configuration: disabled, 0/0 ns, normal polarity
+  actual configuration:    disabled, 0/0 ns, normal polarity
+ pwm-3   ((null)              ):
+  requested configuration: disabled, 0/0 ns, normal polarity
+  actual configuration:    disabled, 0/0 ns, normal polarity
+ pwm-4   ((null)              ):
+  requested configuration: disabled, 0/0 ns, normal polarity
+  actual configuration:    disabled, 0/0 ns, normal polarity
+ pwm-5   (ac300-clk           ): requested
+  requested configuration:  enabled, 250/500 ns, normal polarity
+  actual configuration:    disabled, 0/0 ns, normal polarity

@@ -28,6 +28,13 @@ extern "C" {
 
 
 
+/* GetFd returns a borrowed library-owned descriptor. Serialize setup, transfers
+ * and close; never close a borrowed descriptor independently. Repeated setup
+ * retires the old descriptor. A setup ioctl failure leaves the slot closed and
+ * requires a fresh successful setup (kernel parameters may have changed).
+ * A failed open leaves an existing slot intact. */
+
+
 int wiringPiSPIGetFd     (int channel) ;
 int wiringPiSPIDataRW    (int channel, unsigned char *data, int len) ;
 int wiringPiSPISetupMode (int channel, int speed, int mode) ;
