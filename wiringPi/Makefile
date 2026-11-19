@@ -46,7 +46,7 @@ LIBS    = -lm -lpthread -lrt -lcrypt -latomic
 
 ###############################################################################
 
-SRC	=	wiringPi.c wiringPiH618.c wiringPiH618Threads.c wiringPiH618Pwm.c		\
+SRC	=	wiringPi.c wiringPiH618.c wiringPiH618Line.c wiringPiH618Threads.c wiringPiH618Pwm.c		\
 		wiringSerial.c wiringShift.c				\
 		piHiPri.c piThread.c					\
 		wiringPiSPI.c wiringPiI2C.c				\
@@ -135,6 +135,7 @@ depend:
 
 # DO NOT DELETE
 
+wiringPiH618Line.o wiringPiH618.o wiringPiH618Pwm.o: wiringPiH618.h wiringPiH618Line.h
 wiringPi.o: softPwm.h softTone.h wiringPi.h ../version.h
 wiringSerial.o: wiringSerial.h
 wiringShift.o: wiringPi.h wiringShift.h

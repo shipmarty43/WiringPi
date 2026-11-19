@@ -14,6 +14,7 @@
 #include <unistd.h>
 #include "wiringPi.h"
 #include "wiringPiH618.h"
+#include "wiringPiH618Line.h"
 #ifndef H618_PWM_DT
 #define H618_PWM_DT "/sys/firmware/devicetree/base"
 #endif
@@ -23,6 +24,8 @@
 static pthread_mutex_t pwmLock = PTHREAD_MUTEX_INITIALIZER;
 static char pwmChip[PATH_MAX];
 static pid_t owner;
+static int lease, lastLease, orphaned;
+static unsigned savedRange, savedDivisor;
 static unsigned pwmRange = 1024, pwmDivisor = 32, pwmValue;
 
 static int readBytes(const char *path, void *data, size_t size) {
@@ -38,7 +41,7 @@ static int equalFile(const char *path, const char *value, size_t size) {
   int n = readBytes(path, buf, sizeof(buf));
   return n == (int)size && !memcmp(buf, value, size);
 }
-static int routeValid(void) {
+int h618PwmRouted(void) {
   char a[8], b[8];
   return equalFile(H618_PWM_DT "/soc/pwm1@0300a000/status", "okay", 5) &&
     equalFile(H618_PWM_DT "/soc/pinctrl@300b000/pwm1-pi-pin/pins", "PI11", 5) &&
@@ -111,12 +114,20 @@ static int release(void) {
   if (put("pwm1/duty_cycle", "0") < 0) err = errno;
   if (put("pwm1/enable", "0") < 0 && !err) err = errno;
   if (put("unexport", "1") < 0) { if (!err) err = errno; }
-  else { owner = 0; pwmValue = 0; pwmChip[0] = 0; }
+  else {
+    if (lease) { pwmRange = savedRange; pwmDivisor = savedDivisor; }
+    owner = 0; lease = 0; orphaned = 0; pwmValue = 0; pwmChip[0] = 0;
+  }
   errno = err; return err ? -1 : 0;
+}
+static int legacyAllowed(void) {
+  if (!lease) return 1;
+  errno = EBUSY;
+  return 0;
 }
 int h618PwmClose(void) {
   pthread_mutex_lock(&pwmLock);
-  int ret = release();
+  int ret = legacyAllowed() ? release() : -1;
   pthread_mutex_unlock(&pwmLock); return ret;
 }
 int h618PwmMode(int pin) {
@@ -124,12 +135,11 @@ int h618PwmMode(int pin) {
   int ret = pin == 267 && owner == getpid();
   pthread_mutex_unlock(&pwmLock); return ret;
 }
-int h618PwmStart(int pin) {
-  if (pin != 267) { errno = ENOTSUP; return -1; }
-  pthread_mutex_lock(&pwmLock);
+static int startLocked(unsigned range, unsigned divisor, unsigned duty) {
   int ret = -1;
+  if (orphaned && release() < 0) return -1;
   if (owner) { errno = owner == getpid() ? EBUSY : ECHILD; goto out; }
-  if (!routeValid()) { errno = ENODEV; goto out; }
+  if (!h618PwmRouted()) { errno = ENODEV; goto out; }
   glob_t paths = {0};
   unsigned matches = 0;
   if (!glob(H618_PWM_SYSFS "/pwmchip*", 0, NULL, &paths)) {
@@ -144,22 +154,28 @@ int h618PwmStart(int pin) {
   owner = getpid();
   /* Kernel sysfs registration is synchronous. No daemon/permission changes. */
   if (put("pwm1/enable", "0") < 0 || put("pwm1/polarity", "normal") < 0 ||
-      apply(pwmRange, pwmDivisor, 0) < 0) {
-    int err = errno; release(); errno = err; goto out;
+      apply(range, divisor, duty) < 0) {
+    int err = errno; release(); orphaned = owner != 0; errno = err; goto out;
   }
   ret = 0; errno = 0;
 out:
+  return ret;
+}
+int h618PwmStart(int pin) {
+  if (pin != 267) { errno = ENOTSUP; return -1; }
+  pthread_mutex_lock(&pwmLock);
+  int ret = startLocked(pwmRange, pwmDivisor, 0);
   pthread_mutex_unlock(&pwmLock); return ret;
 }
 int h618PwmRange(unsigned range) {
   pthread_mutex_lock(&pwmLock);
-  int ret = apply(range, pwmDivisor, pwmValue);
+  int ret = legacyAllowed() ? apply(range, pwmDivisor, pwmValue) : -1;
   pthread_mutex_unlock(&pwmLock); return ret;
 }
 int h618PwmClock(int divisor) {
   if (divisor <= 0) { errno = EINVAL; return -1; }
   pthread_mutex_lock(&pwmLock);
-  int ret = apply(pwmRange, (unsigned)divisor, pwmValue);
+  int ret = legacyAllowed() ? apply(pwmRange, (unsigned)divisor, pwmValue) : -1;
   pthread_mutex_unlock(&pwmLock); return ret;
 }
 int h618PwmWrite(int pin, int value) {
@@ -168,6 +184,49 @@ int h618PwmWrite(int pin, int value) {
   pthread_mutex_lock(&pwmLock);
   int ret = -1;
   if (!owner) errno = EPERM;
-  else ret = apply(pwmRange, pwmDivisor, (unsigned)value);
+  else if (legacyAllowed()) ret = apply(pwmRange, pwmDivisor, (unsigned)value);
   pthread_mutex_unlock(&pwmLock); return ret;
+}
+
+/* Called only by the process-exit handler. A legacy PM_OFF must leave an
+ * independent lease alone, even when both clients run in one process. */
+void h618PwmExit(void) {
+  pthread_mutex_lock(&pwmLock);
+  if (owner == getpid() && (lease || orphaned)) release();
+  pthread_mutex_unlock(&pwmLock);
+}
+
+int h618PwmClaim(unsigned range, unsigned divisor, unsigned duty) {
+  uint64_t period;
+  if (periodFor(range, divisor, &period) < 0) return -1;
+  if (duty > range) { errno = EINVAL; return -1; }
+  pthread_mutex_lock(&pwmLock);
+  int ret = -1;
+  if (lastLease == INT_MAX) errno = EOVERFLOW;
+  else {
+    unsigned oldRange = pwmRange, oldDivisor = pwmDivisor;
+    if (startLocked(range, divisor, duty) == 0) {
+      savedRange = oldRange; savedDivisor = oldDivisor;
+      ret = lease = ++lastLease;
+    }
+  }
+  pthread_mutex_unlock(&pwmLock);
+  return ret;
+}
+static int ownsLease(int token) {
+  if (token <= 0 || token != lease) { errno = ESTALE; return 0; }
+  if (owner != getpid()) { errno = ECHILD; return 0; }
+  return 1;
+}
+int wiringPiH618PwmSet(int token, unsigned duty) {
+  pthread_mutex_lock(&pwmLock);
+  int ret = ownsLease(token) ? apply(pwmRange, pwmDivisor, duty) : -1;
+  pthread_mutex_unlock(&pwmLock);
+  return ret;
+}
+int wiringPiH618PwmRelease(int token) {
+  pthread_mutex_lock(&pwmLock);
+  int ret = ownsLease(token) ? release() : -1;
+  pthread_mutex_unlock(&pwmLock);
+  return ret;
 }

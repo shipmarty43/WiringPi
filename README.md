@@ -10,6 +10,8 @@ Welcome to the WiringPi Library, the highly performant GPIO access library for R
 
 Whether you’re working on a simple LED blink project or a complex automation system, WiringPi provides the tools you need to get the job done efficiently.
 
+For Orange Pi Zero 2W, see the [H618 GPIO backend](documentation/english/h618-support.md) and the [Python package](python/README.md).
+
 ## How to use
 
 To compile programs with wiringPi Library, you need to include `wiringPi.h` as well as link against `wiringPi`:

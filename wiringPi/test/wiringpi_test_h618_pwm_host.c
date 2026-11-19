@@ -42,7 +42,7 @@ static ssize_t fake_write(int fd, const void *buf, size_t size) {
   }
   assert(!ftruncate(fd, 0)); return write(fd, buf, size);
 }
-int main(void) {
+static void setupFixture(void) {
   file(H618_PWM_DT "/soc/pwm1@0300a000/status", "okay", 5);
   file(H618_PWM_DT "/soc/pwm1@0300a000/pinctrl-0", "\0\0\0\27", 4);
   file(H618_PWM_DT "/soc/pinctrl@300b000/pwm1-pi-pin/phandle", "\0\0\0\27", 4);
@@ -55,6 +55,18 @@ int main(void) {
   dirs(H618_PWM_SYSFS "/sunxi_pwm/");
   assert(!symlink("../300a000.pwm", H618_PWM_SYSFS "/pwmchip7/device"));
   assert(!symlink("../sunxi_pwm", H618_PWM_SYSFS "/300a000.pwm/driver"));
+}
+
+#ifdef WPI_PYTHON_FIXTURE
+/* Exported only by the host-test shared object. The Python test checks for
+ * this symbol before using PWM, so it cannot drive a physical controller. */
+void wpiTestPwmFixture(void) { setupFixture(); }
+int __wrap_h618Detected(void) { return 1; }
+int __wrap_h618Setup(void) { return 0; }
+void wpiTestFailUnexport(void) { fail = "unexport"; }
+#else
+int main(void) {
+  setupFixture();
   assert(h618PwmStart(264) < 0 && errno == ENOTSUP);
   assert(h618PwmWrite(267, 10) < 0 && errno == EPERM);
   assert(!h618PwmRange(24000)); assert(!h618PwmClock(1));
@@ -82,7 +94,28 @@ int main(void) {
   unlink(H618_PWM_SYSFS "/pwmchip7/pwm1/enable"); rmdir(H618_PWM_SYSFS "/pwmchip7/pwm1");
   fail = "polarity"; assert(h618PwmStart(267) < 0 && errno == EIO);
   assert(exports == 2 && unexports == 2 && !h618PwmMode(267));
+  int lease1 = h618PwmClaim(12000, 2, 3000);
+  assert(lease1 > 0);
+  assert(equalFile(H618_PWM_SYSFS "/pwmchip7/pwm1/duty_cycle", "250000", 6));
+  assert(h618PwmClaim(1, 1, 0) < 0 && errno == ERANGE);
+  assert(h618PwmClaim(12000, 2, 0) < 0 && errno == EBUSY);
+  assert(h618PwmClose() < 0 && errno == EBUSY);
+  assert(h618PwmRange(6000) < 0 && errno == EBUSY);
+  assert(h618PwmWrite(267, 0) < 0 && errno == EBUSY);
+  assert(wiringPiH618PwmSet(lease1, 12001) < 0 && errno == EINVAL);
+  assert(!wiringPiH618PwmSet(lease1, 6000));
+  fail = "unexport";
+  assert(wiringPiH618PwmRelease(lease1) < 0 && errno == EIO);
+  assert(!wiringPiH618PwmRelease(lease1));
+  assert(pwmRange == 24000 && pwmDivisor == 1);
+  int lease2 = h618PwmClaim(24000, 1, 0);
+  assert(lease2 > lease1);
+  assert(wiringPiH618PwmRelease(lease1) < 0 && errno == ESTALE);
+  assert(wiringPiH618PwmSet(lease1, 1) < 0 && errno == ESTALE);
+  h618PwmExit();
+  assert(!h618PwmMode(267));
   file(H618_PWM_DT "/soc/pinctrl@300b000/pwm1-pi-pin/pins", "PI12", 5);
   previous = writes; assert(h618PwmStart(267) < 0 && errno == ENODEV); assert(writes == previous);
   puts("H618 PWM lifecycle, bounds, routing, collision, fork and I/O failure tests passed");
 }
+#endif

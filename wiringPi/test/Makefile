@@ -25,7 +25,7 @@ host-test:
 	$(CC) -g -Wall $(HOST_TEST_SANITIZERS) -I.. -D_GNU_SOURCE -DWPI_INTEGRATION \
 	  -Dopen=wpi_test_open -Dclose=wpi_test_close -Dioctl=wpi_test_ioctl \
 	  -Dglob=wpi_test_glob -Dglobfree=wpi_test_globfree \
-	  ../wiringPiH618.c ../wiringPiH618Threads.c ../wiringPiH618Pwm.c wiringpi_test_h618_host.c ../wiringPi.c \
+	  ../wiringPiH618.c ../wiringPiH618Threads.c ../wiringPiH618Pwm.c ../wiringPiH618Line.c wiringpi_test_h618_host.c ../wiringPi.c \
 	  ../wiringPiLegacy.c ../softPwm.c ../softTone.c ../piHiPri.c ../../gpio/h618.c \
 	  -Wl,--wrap=h618Detected -lpthread -lm -o "$$tmpdir/h618-integration"; \
 	"$$tmpdir/h618-integration"; \

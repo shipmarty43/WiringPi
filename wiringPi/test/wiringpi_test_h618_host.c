@@ -12,8 +12,11 @@
 #include <string.h>
 #include "wiringPi.h"
 #include "wiringPiH618.h"
+#include "wiringPiH618Line.h"
 static int requests, closes, fail, busy, value, configures, chipinfo_fail, unnamed;
 static uint64_t last_flags;
+static struct gpio_v2_line_config last_request;
+static int value_writes;
 static const int expected[] = {264,263,269,224,225,226,257,227,261,270,228,231,232,262,230,229,233,266,265,256,271,267,268,258,76,272,260,259};
 int wpi_test_glob(const char *pat, int flags, int (*err)(const char *, int), glob_t *g) {
   (void)flags; (void)err;
@@ -49,7 +52,7 @@ int wpi_test_ioctl(int fd, unsigned long op, ...) {
     assert(fd==7 && r->offsets[0]==(unnamed ? 264u : 0u) && r->num_lines==1);
     ++requests;
     if (busy) { errno=EBUSY; return -1; }
-    last_flags=r->config.flags; r->fd=0; return 0; /* FD zero is valid. */
+    last_request=r->config; last_flags=r->config.flags; r->fd=0; return 0; /* FD zero is valid. */
   }
   assert(fd==0);
   if (op == GPIO_V2_LINE_SET_CONFIG_IOCTL) {
@@ -64,7 +67,7 @@ int wpi_test_ioctl(int fd, unsigned long op, ...) {
   }
   struct gpio_v2_line_values *v=arg; assert(v->mask==1);
   if (op==GPIO_V2_LINE_GET_VALUES_IOCTL) {v->bits=value; return 0;}
-  assert(op==GPIO_V2_LINE_SET_VALUES_IOCTL); value=v->bits; return 0;
+  assert(op==GPIO_V2_LINE_SET_VALUES_IOCTL); ++value_writes; value=v->bits; return 0;
 }
 #ifdef WPI_INTEGRATION
 extern int h618Command(int argc, char **argv, int mode);
@@ -104,6 +107,17 @@ int main(void) {
   int old=closes; h618Close(); assert(closes==old+1); h618Close(); assert(closes==old+1);
   assert(h618Read(264)==-1 && errno==ENODEV);
 #ifdef WPI_INTEGRATION
+  int before_writes = value_writes, before_claims = requests;
+  for (int initial = 0; initial <= 1; ++initial) {
+    assert(wiringPiH618LineRequest(3, WPI_H618_OUTPUT, initial, 0, 0, 0) == 0);
+    assert(last_request.flags == GPIO_V2_LINE_FLAG_OUTPUT && last_request.num_attrs == 1);
+    assert(last_request.attrs[0].attr.id == GPIO_V2_LINE_ATTR_ID_OUTPUT_VALUES);
+    assert(last_request.attrs[0].mask == 1 && last_request.attrs[0].attr.values == (unsigned)initial);
+    wpi_test_close(0);
+  }
+  assert(requests == before_claims + 2 && value_writes == before_writes);
+  assert(wiringPiH618LineRequest(3, WPI_H618_INPUT, 1, 0, 0, 0) < 0 && errno == EINVAL);
+  assert(requests == before_claims + 2);
   int model, rev, mem, maker, warranty;
   piBoardId(&model, &rev, &mem, &maker, &warranty);
   assert(model == PI_MODEL_ORANGEPI_ZERO_2W);

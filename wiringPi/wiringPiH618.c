@@ -44,19 +44,22 @@ int h618Compatible(const char *data, size_t size) {
   return board && soc;
 }
 
-int h618Detected(void) {
-  static int detected = -1;
-  if (detected < 0) {
-    char buf[1024];
-    FILE *fp = fopen("/proc/device-tree/compatible", "rb");
-    if (!fp) fp = fopen("/sys/firmware/devicetree/base/compatible", "rb");
-    detected = 0;
-    if (fp) {
-      size_t n = fread(buf, 1, sizeof(buf), fp);
-      if (!ferror(fp) && n < sizeof(buf)) detected = h618Compatible(buf, n);
-      fclose(fp);
-    }
+static pthread_once_t detectOnce = PTHREAD_ONCE_INIT;
+static int detected;
+
+static void detectBoard(void) {
+  char buf[1024];
+  FILE *fp = fopen("/proc/device-tree/compatible", "rb");
+  if (!fp) fp = fopen("/sys/firmware/devicetree/base/compatible", "rb");
+  if (fp) {
+    size_t n = fread(buf, 1, sizeof(buf), fp);
+    if (!ferror(fp) && n < sizeof(buf)) detected = h618Compatible(buf, n);
+    fclose(fp);
   }
+}
+
+int h618Detected(void) {
+  pthread_once(&detectOnce, detectBoard);
   return detected;
 }
 
@@ -100,6 +103,11 @@ void h618Close(void) {
     chip = -1;
   }
   pthread_mutex_unlock(&lock);
+}
+
+static void exitBoard(void) {
+  h618PwmExit();
+  h618Close();
 }
 
 int h618Setup(void) {
@@ -151,7 +159,7 @@ reject:
       if (found != ((1u << 28) - 1)) { close(fd); continue; }
       chip = fd;
       for (int i = 0; i < 28; ++i) fds[i] = -1;
-      if (!registered) { atexit(h618Close); registered = 1; }
+      if (!registered) { atexit(exitBoard); registered = 1; }
     }
   }
   globfree(&paths);
@@ -163,26 +171,32 @@ reject:
 
 /* Separate exclusive request for an IRQ/PWM worker. The kernel arbitrates
  * ownership against normal GPIO requests and other processes. */
-int h618Request(int pin, uint64_t flags, unsigned long debounce) {
+int h618RequestConfigured(int pin, const struct gpio_v2_line_config *config,
+                          const char *consumer) {
   int i = slot(pin), ret = -1;
   if (i < 0) return -1;
   pthread_mutex_lock(&lock);
   if (chip < 0) errno = ENODEV;
   else {
-    struct gpio_v2_line_request req = {.num_lines=1, .event_buffer_size=64};
-    req.offsets[0]=offsets[i];
-    req.config.flags=flags;
-    strcpy(req.consumer, "wiringpi-h618-worker");
-    if (debounce) {
-      req.config.num_attrs=1;
-      req.config.attrs[0].attr.id=GPIO_V2_LINE_ATTR_ID_DEBOUNCE;
-      req.config.attrs[0].attr.debounce_period_us=debounce;
-      req.config.attrs[0].mask=1;
-    }
-    if (ioctl(chip, GPIO_V2_GET_LINE_IOCTL, &req) == 0) ret=req.fd;
+    struct gpio_v2_line_request req = {.num_lines = 1, .event_buffer_size = 64,
+                                       .config = *config};
+    req.offsets[0] = offsets[i];
+    snprintf(req.consumer, sizeof(req.consumer), "%s", consumer);
+    if (ioctl(chip, GPIO_V2_GET_LINE_IOCTL, &req) == 0) ret = req.fd;
   }
   pthread_mutex_unlock(&lock);
   return ret;
+}
+
+int h618Request(int pin, uint64_t flags, unsigned long debounce) {
+  struct gpio_v2_line_config config = {.flags = flags};
+  if (debounce) {
+    config.num_attrs = 1;
+    config.attrs[0].attr.id = GPIO_V2_LINE_ATTR_ID_DEBOUNCE;
+    config.attrs[0].attr.debounce_period_us = debounce;
+    config.attrs[0].mask = 1;
+  }
+  return h618RequestConfigured(pin, &config, "wiringpi-h618-worker");
 }
 
 /* Caller holds lock. Reconfigure an owned request atomically: no release gap,

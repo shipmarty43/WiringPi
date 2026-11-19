@@ -19,6 +19,8 @@ int h618Write(int pin, int value);
 int h618Info(int native, uint64_t *flags, char *consumer, size_t size);
 int h618Unsupported(const char *function);
 int h618CurrentPin(int pin);
+struct gpio_v2_line_config;
+int h618RequestConfigured(int pin, const struct gpio_v2_line_config *config, const char *consumer);
 int h618Request(int pin, uint64_t flags, unsigned long debounce);
 int h618WorkersClose(void);
 int h618WorkerStop(int pin, int kind);
@@ -30,6 +32,9 @@ int h618ISR(int pin, int edge, void (*callback)(struct WPIWfiStatus, void *),
 struct WPIWfiStatus h618Wait(int pin, int edge, int ms, unsigned long debounce);
 unsigned long long h618Measure(int pin, int level, uint64_t duration, int frequency);
 void h618Error(const char *function);
+int h618PwmRouted(void);
+void h618PwmExit(void);
+int h618PwmClaim(unsigned range, unsigned divisor, unsigned duty);
 int h618PwmStart(int pin);
 int h618PwmClose(void);
 int h618PwmMode(int pin);

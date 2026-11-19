@@ -1,0 +1,23 @@
+// SPDX-License-Identifier: LGPL-3.0-or-later
+/dts-v1/;
+/plugin/;
+
+/* Test-only overlay for QEMU virt. Named offsets deliberately differ from
+ * sunxi numbers. Never install this DT on a physical board. */
+&{/} {
+	model = "WiringPi Zero 2W gpio-sim fixture";
+	compatible = "linux,dummy-virt", "xunlong,orangepi-zero2w", "allwinner,sun50i-h618";
+	gpio-sim {
+		compatible = "gpio-simulator";
+		bank {
+			gpio-controller;
+			#gpio-cells = <2>;
+			ngpios = <28>;
+			gpio-sim,label = "300b000.pinctrl";
+			gpio-line-names = "PI8", "PI7", "PI13", "PH0", "PH1", "PH2",
+				"PI1", "PH3", "PI5", "PI14", "PH4", "PH7", "PH8", "PI6",
+				"PH6", "PH5", "PH9", "PI10", "PI9", "PI0", "PI15", "PI11",
+				"PI12", "PI2", "PC12", "PI16", "PI4", "PI3";
+		};
+	};
+};

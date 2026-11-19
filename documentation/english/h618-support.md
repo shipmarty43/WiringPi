@@ -409,3 +409,7 @@ H618 UART routing, physical baud accuracy or exchange with a GPS/device.
 
 [Retained 2026-10-27 logs and tested source hashes](h618-validation-2026-10-27/)
 include the failed initial measurement and the final successful public API run.
+
+### Python access to the physical header
+
+The [Python package](../../python/README.md) uses the [checked C ABI](../../wiringPi/wiringPiH618Line.h) for kernel-owned lines, edge events and PWM1. It includes an offline pin map and a read-only kernel ownership report.
