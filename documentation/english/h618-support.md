@@ -86,6 +86,8 @@ userspace polling but do not establish electrical timing accuracy.
 
 ## Header map and kernel discovery
 
+For signal functions, mux conflicts and the corresponding A733 pads, see the [Zero 2W and Zero 3W header reference](orange-pi-zero-headers.md).
+
 Sources: [Orange Pi Zero 2W documentation](http://www.orangepi.org/html/hardWare/computerAndMicrocontrollers/details/Orange-Pi-Zero-2W.html),
 user manual v1.1 section 3.17; the manufacturer's
 [wiringOP next pin tables](https://github.com/orangepi-xunlong/wiringOP/blob/next/wiringPi/wiringPi.c)
