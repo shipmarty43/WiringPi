@@ -57,6 +57,41 @@ Each row can be used for digital GPIO when free. The signal columns list selecte
 
 A hardware UART handshake requires both the four-pin mux and `CRTSCTS` on the tty. SPI clocks are peripheral ceilings and the controller chooses a divider. For SPI3 the audited A733 BSP minimum is 187,500 Hz and the silicon ceiling is 100 MHz. The H618 clock model and A733 clock model use different dividers. [UART and SPI acceptance][handshake] · [H618 SPI clock model][spi] · [A733 routes and clocks][a733] · [Zero 2W PWM channels][pwm]
 
+## Peripheral operating modes
+
+### I²C (TWI)
+
+Both SoC manuals describe controller and target roles, 7-bit and 10-bit addressing, Standard-mode (100 kHz) and Fast-mode (400 kHz). WiringPi's Linux helpers initiate transactions as the controller. `wiringPiI2CSetupInterface(device, address)` selects the Linux adapter and a 7-bit target address such as `0x10` for the DFR0528 MCU. The SMBus byte, register-word and block helpers and the raw read/write helpers operate on the selected descriptor. The 16 in `wiringPiI2CReadReg16` and `wiringPiI2CWriteReg16` denotes the **data word** width. For a combined write/read with a repeated START, use Linux `I2C_RDWR` on an adapter reporting `I2C_FUNC_I2C`. Ten-bit transactions need adapter support and explicit Linux configuration. [WiringPi I²C implementation](../../wiringPi/wiringPiI2C.c) · [Linux I²C userspace interface](https://docs.kernel.org/i2c/dev-interface.html) · [SoC manuals][manuals]
+
+SCL is shared by all devices on the bus. On Zero 2W, `I2C001` selects a whole-bus request up to 400 kHz. With the 24 MHz example parent, 100 and 400 kHz are exact and a 250 kHz request gives 240 kHz. On Zero 3W, `A733IO` offers 100 or 400 kHz on TWI0–3. The UPS profile was checked at both rates on the virtual device. The 400 kHz electrical margin with the actual HAT, pull-ups and wiring still needs a measurement. [H618 TWI clock model][h616-io] · [A733 bus controls][a733] · [Armbian test record][io-tests]
+
+### SPI
+
+Choose the peripheral's clock mode independently of the SCLK frequency and chip select. Leading means the first transition away from idle. [Linux SPI clock modes](https://docs.kernel.org/spi/spi-summary.html)
+
+| SPI mode | CPOL | CPHA | Idle SCLK | Sample edge | Shift edge |
+|---:|---:|---:|---|---|---|
+| 0 | 0 | 0 | Low | Rising (leading) | Falling |
+| 1 | 0 | 1 | Low | Falling (trailing) | Rising |
+| 2 | 1 | 0 | High | Falling (leading) | Rising |
+| 3 | 1 | 1 | High | Rising (trailing) | Falling |
+
+Use `wiringPiSPIxSetupMode(bus, cs, speed_hz, mode)` for an explicit Linux spidev endpoint. It accepts modes 0–3 and sets 8 bits per word. `wiringPiSPIxSetup()` defaults to mode 0. `wiringPiSPIxDataRW()` performs a single full-duplex transfer, with received bytes replacing the transmit buffer. The SoC manuals also describe SPI target operation, three-wire transfers, and dual/quad data paths. The fork's setup API exposes conventional single-lane controller transfers. Wider lanes require matching pins, a device binding and driver support. [WiringPi SPI implementation](../../wiringPi/wiringPiSPI.c) · [SoC manuals][manuals]
+
+On H618, the configurator models 3 kHz–100 MHz and limits each endpoint to its composed DT ceiling. The H616 clock controller sets MCLK and the SPI block divides it again. At an example 24 MHz MCLK, a 5 MHz request gives 4 MHz. On A733 SPI2/SPI3, the supported request range in the vendor profile is 187,500 Hz–100 MHz. For a given parent clock, the A733 CCU grid is `parent_hz / ((M + 1) × (N + 1))`, with M and N each in 0–31. Use the attached device's own limit. On a physical Zero 2W, the Waveshare SX1262 answered `GetStatus` at 500 kHz and passed receive-timeout checks on the 2 MHz path in mode 0. [H618 frequency grid][spi] · [A733 clock model][a733] · [SX1262 board results][spi-board]
+
+### UART
+
+Two-wire operation uses TX/RX. Hardware flow control adds RTS/CTS and requires the four pads in the route table above. Framing specifies data bits (5–8), parity (none, even or odd) and stop length (1 or 2, with 1.5 as the long stop for five data bits). For example, 8N1 is eight data bits, no parity and one stop bit. The nominal baud is `uart_clock_hz / (16 × divisor)`. Linux termios readback confirms the configured setting. The Waveshare GNSS receiver delivered NMEA on Zero 2W UART0 at 9,600 baud, 8N1. [H618 UART controls][h616-io] · [Four-wire route tests][handshake] · [GNSS board record][gnss]
+
+**Opening the tty changes its settings.** `serialOpen(device, baud)` applies raw 8N1, clears `CRTSCTS`, and asserts RTS and DTR when supported. For 7E2 or automatic RTS/CTS, apply the required termios settings to the returned descriptor after opening it. The function accepts a discrete baud list from 50 through 4,000,000 and returns `-2` for an unlisted rate. The A733 manual gives 1.5 Mbaud for a 24 MHz input and 10 Mbaud for a 160 MHz input on the main UARTs. Its S_UART0 header route exposes TX/RX. Both manuals describe RS-485/9-bit operation. RS-485 direction control requires a compatible tty driver and an external transceiver. [WiringPi serial implementation](../../wiringPi/wiringSerial.c) · [A733 clock and framing settings][a733] · [Hardware audit][audit]
+
+### PWM
+
+On Zero 2W, the WiringPi hardware API supports continuous mark-space PWM (`PWM_MODE_MS`) on PWM1, pin 32/PI11. With `pwmSetClock(divisor)`, `pwmSetRange(range)` and `pwmWrite(pin, value)`, the model is `frequency_hz = 24000000 / (divisor × range)` and `active_duty = value / range`. Divisor 1, range 24,000 and value 6,000 request **1 kHz at 25% duty**. The backend accepts periods from 1 µs to 1 s. Requests for balanced PWM or hardware tone set `errno` to `ENOTSUP`. Software PWM uses a userspace worker and its timing depends on host scheduling. On the board, PWM1 was loopback-tested at 10, 100 and 1,000 Hz with 25%, 50% and 75% duty. [WiringPi PWM1 API and measurements](h618-support.md#public-hardware-pwm1-api--2026-10-27)
+
+The companion `PWM001` menu covers H618 header channels 1–4. It saves 0–100% active duty and normal or inversed polarity. The tested driver forces normal polarity on enable, so an active-low profile requests the complementary high interval. At 1 kHz and 37.5% active-low this gives 625 µs high and 375 µs low. The H616 and A733 manuals also describe finite pulse trains, input capture and complementary pairs with dead time. These are silicon capabilities beyond this fork's PWM API. The A733 header entries document routes for the porting target. [PWM profiles and polarity][h616-io] · [H618 channel routes][pwm] · [A733 PWM reference][audit]
+
 ## Bias, pad drive and interrupt debounce
 
 To print the Zero 2W physical-pin map with the matching library installed, use `python -m wiringpi_zero2w --map`. The mapping command works without opening a GPIO chip. [Python binding](../../python/README.md)
@@ -78,6 +113,8 @@ The drivers round the requested period to an available clock/divider. A zero cel
 
 ## Evidence for this reference
 
+Register and mux descriptions use **H616 User Manual v1.0** and **A733 User Manual v1.00** with **A733 Datasheet v1.01**. The companion project records the original sources and the SHA-256 of each PDF. [Manuals and schematics][manuals] · [Document checksums][manual-hashes]
+
 | Board | Armbian DTB used for the audit | Validation |
 |---|---|---|
 | Zero 2W | `sun50i-h618-orangepi-zero2w.dtb`, 6.18.57-current-sunxi64, SHA-256 `4b90c01af0137b2297fb7243f200c5b32c33ce7e9b0e3d15fbde8c9733363758` | All 28 H618 mappings were checked against the board manual. Digital and IRQ loopback on 37↔29 and PWM1 on 32→29 were exercised on a physical Zero 2W. |
@@ -94,3 +131,8 @@ For another OS image, check the root compatible, GPIO controller, pin groups and
 [electrical]: https://github.com/shipmarty43/configng/blob/64e94903f82a88f30ab6a0c7f548569c4ac40fa7/hardware/header-gpio/README.md
 [electrical-tests]: https://github.com/shipmarty43/configng/blob/64e94903f82a88f30ab6a0c7f548569c4ac40fa7/tests/hardware/header-gpio-electrical.md
 [a733-mux]: https://github.com/orangepi-xunlong/linux-orangepi/blob/2ac08e8c7cdc28abbdc5c9a9dd812f887ae9c79f/bsp/drivers/pinctrl/pinctrl-sun60iw2.c
+[h616-io]: https://github.com/shipmarty43/configng/blob/64e94903f82a88f30ab6a0c7f548569c4ac40fa7/hardware/h616-io/README.md
+[io-tests]: https://github.com/shipmarty43/configng/blob/64e94903f82a88f30ab6a0c7f548569c4ac40fa7/tests/hardware/zero2w-twi-uart-pwm.md
+[spi-board]: https://github.com/shipmarty43/configng/blob/64e94903f82a88f30ab6a0c7f548569c4ac40fa7/tests/hardware/zero2w-radio-board-2026-11-20.md
+[gnss]: https://github.com/shipmarty43/configng/blob/64e94903f82a88f30ab6a0c7f548569c4ac40fa7/tests/hardware/zero2w-console-tty.md
+[manual-hashes]: https://github.com/shipmarty43/configng/blob/64e94903f82a88f30ab6a0c7f548569c4ac40fa7/tests/hardware/soc-reference.sha256
