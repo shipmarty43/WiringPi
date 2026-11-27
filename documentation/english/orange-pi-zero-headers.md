@@ -61,7 +61,7 @@ A hardware UART handshake requires both the four-pin mux and `CRTSCTS` on the tt
 
 ### I²C (TWI)
 
-Both SoC manuals describe controller and target roles, 7-bit and 10-bit addressing, Standard-mode (100 kHz) and Fast-mode (400 kHz). WiringPi's Linux helpers initiate transactions as the controller. `wiringPiI2CSetupInterface(device, address)` selects the Linux adapter and a 7-bit target address such as `0x10` for the DFR0528 MCU. The SMBus byte, register-word and block helpers and the raw read/write helpers operate on the selected descriptor. The 16 in `wiringPiI2CReadReg16` and `wiringPiI2CWriteReg16` denotes the **data word** width. For a combined write/read with a repeated START, use Linux `I2C_RDWR` on an adapter reporting `I2C_FUNC_I2C`. Ten-bit transactions need adapter support and explicit Linux configuration. [WiringPi I²C implementation](../../wiringPi/wiringPiI2C.c) · [Linux I²C userspace interface](https://docs.kernel.org/i2c/dev-interface.html) · [SoC manuals][manuals]
+Both SoC manuals describe controller and target roles, 7-bit and 10-bit addressing, Standard-mode (100 kHz) and Fast-mode (400 kHz). WiringPi's Linux helpers initiate transactions as the controller. `wiringPiI2CSetupInterface(device, address)` selects the Linux adapter and a 7-bit target address such as `0x10` for the DFR0528 MCU. The SMBus byte, register-word and block helpers and the raw read/write helpers operate on the selected descriptor. The 16 in `wiringPiI2CReadReg16` and `wiringPiI2CWriteReg16` denotes the **data word** width. For a combined write/read with a repeated START, use Linux `I2C_RDWR` on an adapter reporting `I2C_FUNC_I2C`. Ten-bit transactions need adapter support and explicit Linux configuration. [WiringPi I²C implementation](../../wiringPi/wiringPiI2C.c) · [Linux I²C userspace interface](https://docs.kernel.org/i2c/dev-interface.html) · [SoC manuals](#soc-manuals-pdf)
 
 SCL is shared by all devices on the bus. On Zero 2W, `I2C001` selects a whole-bus request up to 400 kHz. With the 24 MHz example parent, 100 and 400 kHz are exact and a 250 kHz request gives 240 kHz. On Zero 3W, `A733IO` offers 100 or 400 kHz on TWI0–3. The UPS profile was checked at both rates on the virtual device. The 400 kHz electrical margin with the actual HAT, pull-ups and wiring still needs a measurement. [H618 TWI clock model][h616-io] · [A733 bus controls][a733] · [Armbian test record][io-tests]
 
@@ -76,7 +76,7 @@ Choose the peripheral's clock mode independently of the SCLK frequency and chip 
 | 2 | 1 | 0 | High | Falling (leading) | Rising |
 | 3 | 1 | 1 | High | Rising (trailing) | Falling |
 
-Use `wiringPiSPIxSetupMode(bus, cs, speed_hz, mode)` for an explicit Linux spidev endpoint. It accepts modes 0–3 and sets 8 bits per word. `wiringPiSPIxSetup()` defaults to mode 0. `wiringPiSPIxDataRW()` performs a single full-duplex transfer, with received bytes replacing the transmit buffer. The SoC manuals also describe SPI target operation, three-wire transfers, and dual/quad data paths. The fork's setup API exposes conventional single-lane controller transfers. Wider lanes require matching pins, a device binding and driver support. [WiringPi SPI implementation](../../wiringPi/wiringPiSPI.c) · [SoC manuals][manuals]
+Use `wiringPiSPIxSetupMode(bus, cs, speed_hz, mode)` for an explicit Linux spidev endpoint. It accepts modes 0–3 and sets 8 bits per word. `wiringPiSPIxSetup()` defaults to mode 0. `wiringPiSPIxDataRW()` performs a single full-duplex transfer, with received bytes replacing the transmit buffer. The SoC manuals also describe SPI target operation, three-wire transfers, and dual/quad data paths. The fork's setup API exposes conventional single-lane controller transfers. Wider lanes require matching pins, a device binding and driver support. [WiringPi SPI implementation](../../wiringPi/wiringPiSPI.c) · [SoC manuals](#soc-manuals-pdf)
 
 On H618, the configurator models 3 kHz–100 MHz and limits each endpoint to its composed DT ceiling. The H616 clock controller sets MCLK and the SPI block divides it again. At an example 24 MHz MCLK, a 5 MHz request gives 4 MHz. On A733 SPI2/SPI3, the supported request range in the vendor profile is 187,500 Hz–100 MHz. For a given parent clock, the A733 CCU grid is `parent_hz / ((M + 1) × (N + 1))`, with M and N each in 0–31. Use the attached device's own limit. On a physical Zero 2W, the Waveshare SX1262 answered `GetStatus` at 500 kHz and passed receive-timeout checks on the 2 MHz path in mode 0. [H618 frequency grid][spi] · [A733 clock model][a733] · [SX1262 board results][spi-board]
 
@@ -113,8 +113,6 @@ The drivers round the requested period to an available clock/divider. A zero cel
 
 ## Evidence for this reference
 
-Register and mux descriptions use **H616 User Manual v1.0** and **A733 User Manual v1.00** with **A733 Datasheet v1.01**. The companion project records the original sources and the SHA-256 of each PDF. [Manuals and schematics][manuals] · [Document checksums][manual-hashes]
-
 | Board | Armbian DTB used for the audit | Validation |
 |---|---|---|
 | Zero 2W | `sun50i-h618-orangepi-zero2w.dtb`, 6.18.57-current-sunxi64, SHA-256 `4b90c01af0137b2297fb7243f200c5b32c33ce7e9b0e3d15fbde8c9733363758` | All 28 H618 mappings were checked against the board manual. Digital and IRQ loopback on 37↔29 and PWM1 on 32→29 were exercised on a physical Zero 2W. |
@@ -122,8 +120,16 @@ Register and mux descriptions use **H616 User Manual v1.0** and **A733 User Manu
 
 For another OS image, check the root compatible, GPIO controller, pin groups and enabled consumers before reusing these routes. The audited A733 DTB identifies `xunlong,orangepi-zero3w` and `arm,sun60iw2p1`. An older vendor DTS uses a 4 Pro compatible for a Zero 3W source file. [Board manuals, schematics and revisions][manuals] · [H618 kernel mux](https://github.com/torvalds/linux/blob/v6.18/drivers/pinctrl/sunxi/pinctrl-sun50i-h616.c) · [A733 vendor mux][a733-mux] · [WiringPi physical tests](h618-support.md#physical-loopback-validation)
 
+### SoC manuals (PDF)
+
+- [H616 User Manual v1.0][h616-manual-pdf] — Chapter 9 covers TWI, UART, SPI, GPIO and PWM on the related H616 silicon.
+- [A733 User Manual v1.00][a733-manual-pdf] — Sections 18.7–18.11 and 18.14 describe the peripheral controllers and GPIO registers.
+- [A733 Datasheet v1.01][a733-datasheet-pdf] — Section 4.2 lists each pad’s alternate functions.
+
+The SHA-256 digests identify the exact editions used for the pin audit. [Document checksums][manual-hashes]
+
 [audit]: https://github.com/shipmarty43/configng/blob/64e94903f82a88f30ab6a0c7f548569c4ac40fa7/tests/hardware/pin-manual-audit.md
-[manuals]: https://github.com/shipmarty43/configng/blob/64e94903f82a88f30ab6a0c7f548569c4ac40fa7/tests/hardware/zero3w-port.md#offline-reference-library
+[manuals]: https://github.com/shipmarty43/configng/blob/ba9342548a3d0e6436dd7b965799b2677d1792b9/tests/hardware/zero3w-port.md#offline-reference-library
 [a733]: https://github.com/shipmarty43/configng/blob/64e94903f82a88f30ab6a0c7f548569c4ac40fa7/hardware/a733-io/README.md
 [handshake]: https://github.com/shipmarty43/configng/blob/64e94903f82a88f30ab6a0c7f548569c4ac40fa7/tests/hardware/header-cs-rtscts.md
 [spi]: https://github.com/shipmarty43/configng/blob/64e94903f82a88f30ab6a0c7f548569c4ac40fa7/hardware/sx1262-mode/spi-clock.md
@@ -135,4 +141,7 @@ For another OS image, check the root compatible, GPIO controller, pin groups and
 [io-tests]: https://github.com/shipmarty43/configng/blob/64e94903f82a88f30ab6a0c7f548569c4ac40fa7/tests/hardware/zero2w-twi-uart-pwm.md
 [spi-board]: https://github.com/shipmarty43/configng/blob/64e94903f82a88f30ab6a0c7f548569c4ac40fa7/tests/hardware/zero2w-radio-board-2026-11-20.md
 [gnss]: https://github.com/shipmarty43/configng/blob/64e94903f82a88f30ab6a0c7f548569c4ac40fa7/tests/hardware/zero2w-console-tty.md
-[manual-hashes]: https://github.com/shipmarty43/configng/blob/64e94903f82a88f30ab6a0c7f548569c4ac40fa7/tests/hardware/soc-reference.sha256
+[manual-hashes]: https://github.com/shipmarty43/configng/blob/ba9342548a3d0e6436dd7b965799b2677d1792b9/tests/hardware/soc-reference.sha256
+[h616-manual-pdf]: https://www.scs.stanford.edu/~zyedidia/docs/allwinner/h616.pdf
+[a733-manual-pdf]: https://gitlab.com/tina5.0_aiot/product/docs/-/raw/d0dc4d615be00b76e3a0818d0818eff8f69ffa15/A733/Hardware%E7%A1%AC%E4%BB%B6%E7%B1%BB%E6%96%87%E6%A1%A3/%E8%8A%AF%E7%89%87%E6%89%8B%E5%86%8C/A733_User%20Manual_V1.00.pdf
+[a733-datasheet-pdf]: https://gitlab.com/tina5.0_aiot/product/docs/-/raw/d0dc4d615be00b76e3a0818d0818eff8f69ffa15/A733/Hardware%E7%A1%AC%E4%BB%B6%E7%B1%BB%E6%96%87%E6%A1%A3/%E8%8A%AF%E7%89%87%E6%89%8B%E5%86%8C/A733_Datasheet_V1.01.pdf
