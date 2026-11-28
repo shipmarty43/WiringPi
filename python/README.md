@@ -146,3 +146,8 @@ package with both Python modules and a private libwiringPi under
 `/usr/lib/wiringpi-orange/`. Its C headers are installed under
 `/usr/include/wiringpi-orange/`. The distribution's gpio command can coexist
 with the package.
+
+When cross-building for Debian 13, set `SYSROOT` to a merged-/usr ARM64
+sysroot containing that suite's libc6, libc6-dev, linux-libc-dev, libcrypt1
+and libcrypt-dev. The package builder uses these headers and the target linker
+script and derives the minimum libc dependency from the resulting library.
