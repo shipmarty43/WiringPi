@@ -256,7 +256,7 @@ int wiringPiI2CSetupInterface (const char *device, int devId)
 
 int wiringPiI2CSetup (const int devId)
 {
-  if (h618Detected()) return h618Unsupported("implicit I2C adapter; use wiringPiI2CSetupInterface");
+  if (opiDetected()) return h618Unsupported("implicit I2C adapter; use wiringPiI2CSetupInterface");
   int rev ;
   const char *device ;
 

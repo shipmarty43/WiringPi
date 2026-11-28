@@ -6,6 +6,9 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <glob.h>
+#include <limits.h>
+#include <sys/stat.h>
+#include <sys/sysmacros.h>
 #include <linux/gpio.h>
 #include <pthread.h>
 #include <stdio.h>
@@ -20,11 +23,15 @@ static const int nativePins[28] = {
   264,263,269,224,225,226,257,227,261,270,228,231,232,262,
   230,229,233,266,265,256,271,267,268,258,76,272,260,259
 };
+static const int a733Pins[28] = {
+  35, 34, 36, 41, 42, 32, 37, 33, 139, 354, 355, 130, 131, 96,
+  129, 128, 132, 357, 356, 140, 141, 97, 99, 38, 98, 100, 40, 39
+};
 static const int physicalPins[28] = {
   3,5,7,8,10,11,12,13,15,16,18,19,21,22,23,24,26,27,28,
   29,31,32,33,35,36,37,38,40
 };
-static int chip = -1;
+static int chip = -1, standbyChip = -1;
 static int registered;
 static int fds[28];
 static unsigned offsets[28];
@@ -32,20 +39,27 @@ static uint64_t lineFlags[28];
 static int outputValues[28];
 static pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
 
-int h618Compatible(const char *data, size_t size) {
+static int compatible(const char *data, size_t size, const char *boardName, const char *socName) {
   int board = 0, soc = 0;
   for (size_t pos = 0; pos < size;) {
     const char *end = memchr(data + pos, 0, size - pos);
     if (!end) return 0;
-    if (!strcmp(data + pos, "xunlong,orangepi-zero2w")) board = 1;
-    if (!strcmp(data + pos, "allwinner,sun50i-h618")) soc = 1;
+    if (!strcmp(data + pos, boardName)) board = 1;
+    if (!strcmp(data + pos, socName)) soc = 1;
     pos = (size_t)(end - data) + 1;
   }
   return board && soc;
 }
 
+int h618Compatible(const char *data, size_t size) {
+  return compatible(data, size, "xunlong,orangepi-zero2w", "allwinner,sun50i-h618");
+}
+int a733Compatible(const char *data, size_t size) {
+  return compatible(data, size, "xunlong,orangepi-zero3w", "arm,sun60iw2p1");
+}
+
 static pthread_once_t detectOnce = PTHREAD_ONCE_INIT;
-static int detected;
+static int detected, isA733;
 
 static void detectBoard(void) {
   char buf[1024];
@@ -53,7 +67,11 @@ static void detectBoard(void) {
   if (!fp) fp = fopen("/sys/firmware/devicetree/base/compatible", "rb");
   if (fp) {
     size_t n = fread(buf, 1, sizeof(buf), fp);
-    if (!ferror(fp) && n < sizeof(buf)) detected = h618Compatible(buf, n);
+    if (!ferror(fp) && n < sizeof(buf)) {
+      detected = h618Compatible(buf, n);
+      isA733 = a733Compatible(buf, n);
+      if (detected && isA733) detected = isA733 = 0;
+    }
     fclose(fp);
   }
 }
@@ -63,21 +81,30 @@ int h618Detected(void) {
   return detected;
 }
 
+int a733Detected(void) {
+  pthread_once(&detectOnce, detectBoard);
+  return isA733;
+}
+
+static const int *boardPins(void) { return a733Detected() ? a733Pins : nativePins; }
+static int lineChip(int i) { return a733Detected() && a733Pins[i] >= 352 ? standbyChip : chip; }
+
 static int slot(int native) {
-  for (int i = 0; i < 28; ++i) if (nativePins[i] == native) return i;
+  for (int i = 0; i < 28; ++i) if (boardPins()[i] == native) return i;
   errno = EINVAL;
   return -1;
 }
 int h618Wpi(int pin) {
-  if (pin >= 0 && pin < 28) return nativePins[pin];
+  if (pin >= 0 && pin < 28) return boardPins()[pin];
   errno = EINVAL;
   return -1;
 }
-int h618Physical(int pin) {
-  for (int i = 0; i < 28; ++i) if (physicalPins[i] == pin) return nativePins[i];
+int opiPhysical(int pin, int a733) {
+  for (int i = 0; i < 28; ++i) if (physicalPins[i] == pin) return a733 ? a733Pins[i] : nativePins[i];
   errno = EINVAL;
   return -1;
 }
+int h618Physical(int pin) { return opiPhysical(pin, a733Detected()); }
 int h618Map(int pin, int mode) {
   switch (mode) {
     case WPI_MODE_PINS: case WPI_MODE_GPIO_DEVICE_WPI: return h618Wpi(pin);
@@ -99,6 +126,7 @@ void h618Close(void) {
       lineFlags[i] = 0;
       outputValues[i] = 0;
     }
+    if (standbyChip >= 0) { close(standbyChip); standbyChip = -1; }
     close(chip);
     chip = -1;
   }
@@ -110,13 +138,67 @@ static void exitBoard(void) {
   h618Close();
 }
 
+/* Match the gpiochip character device to its actual OF ancestor. BSP labels
+ * are platform names, while gpiochip numbers are assigned at probe time. */
+static int a733Controller(int fd) {
+  struct stat st;
+  char link[128], path[PATH_MAX], target[PATH_MAX];
+  if (fstat(fd, &st) < 0 || !S_ISCHR(st.st_mode)) return -1;
+  snprintf(link, sizeof(link), "/sys/dev/char/%u:%u", major(st.st_rdev), minor(st.st_rdev));
+  if (!realpath(link, path)) return -1;
+  while (!strncmp(path, "/sys/devices/", 13)) {
+    char node[PATH_MAX];
+    if (snprintf(node, sizeof(node), "%s/of_node", path) >= (int)sizeof(node)) return -1;
+    if (realpath(node, target)) {
+      if (!strcmp(target, "/sys/firmware/devicetree/base/soc@3000000/pinctrl@2000000")) return 0;
+      if (!strcmp(target, "/sys/firmware/devicetree/base/soc@3000000/pinctrl@7025000")) return 1;
+    }
+    *strrchr(path, '/') = 0;
+  }
+  return -1;
+}
+
+static int discoverA733(glob_t *paths) {
+  int found[2] = {-1, -1}, error = ENODEV;
+  for (size_t p = 0; p < paths->gl_pathc; ++p) {
+    int fd = open(paths->gl_pathv[p], O_RDONLY | O_CLOEXEC);
+    if (fd < 0) { if (errno == EACCES) error = errno; continue; }
+    int ctl = a733Controller(fd);
+    if (ctl < 0) { close(fd); continue; }
+    struct gpiochip_info info = {0};
+    if (found[ctl] >= 0 || ioctl(fd, GPIO_GET_CHIPINFO_IOCTL, &info) < 0 ||
+        info.lines != (ctl ? 64u : 352u)) { close(fd); goto fail; }
+    found[ctl] = fd;
+    for (int i = 0; i < 28; ++i) {
+      int native = a733Pins[i];
+      if ((native >= 352) != ctl) continue;
+      struct gpio_v2_line_info li = {.offset = (unsigned)(native - (ctl ? 352 : 0))};
+      char pad[16];
+      snprintf(pad, sizeof(pad), "P%c%d", 'A' + native/32, native%32);
+      if (ioctl(fd, GPIO_V2_GET_LINEINFO_IOCTL, &li) < 0 ||
+          (li.name[0] && strcmp(li.name, pad))) goto fail;
+      offsets[i] = li.offset;
+    }
+  }
+  if (found[0] < 0 || found[1] < 0) goto fail;
+  chip = found[0];
+  standbyChip = found[1];
+  return 0;
+fail:
+  for (int i = 0; i < 2; ++i) if (found[i] >= 0) close(found[i]);
+  errno = error;
+  return -1;
+}
+
 int h618Setup(void) {
   glob_t paths = {0};
   pthread_mutex_lock(&lock);
   if (chip >= 0) { pthread_mutex_unlock(&lock); return 0; }
   int error = ENODEV;
   if (!glob("/dev/gpiochip*", 0, NULL, &paths)) {
-    for (size_t p = 0; p < paths.gl_pathc && chip < 0; ++p) {
+    if (a733Detected()) {
+      if (discoverA733(&paths) < 0) error = errno;
+    } else for (size_t p = 0; p < paths.gl_pathc && chip < 0; ++p) {
       int fd = open(paths.gl_pathv[p], O_RDONLY | O_CLOEXEC);
       if (fd < 0) { if (errno == EACCES) error = EACCES; continue; }
       struct gpiochip_info info = {0};
@@ -158,6 +240,8 @@ int h618Setup(void) {
 reject:
       if (found != ((1u << 28) - 1)) { close(fd); continue; }
       chip = fd;
+    }
+    if (chip >= 0) {
       for (int i = 0; i < 28; ++i) fds[i] = -1;
       if (!registered) { atexit(exitBoard); registered = 1; }
     }
@@ -182,7 +266,7 @@ int h618RequestConfigured(int pin, const struct gpio_v2_line_config *config,
                                        .config = *config};
     req.offsets[0] = offsets[i];
     snprintf(req.consumer, sizeof(req.consumer), "%s", consumer);
-    if (ioctl(chip, GPIO_V2_GET_LINE_IOCTL, &req) == 0) ret = req.fd;
+    if (ioctl(lineChip(i), GPIO_V2_GET_LINE_IOCTL, &req) == 0) ret = req.fd;
   }
   pthread_mutex_unlock(&lock);
   return ret;
@@ -216,7 +300,7 @@ static int configure(int i, uint64_t flags) {
     struct gpio_v2_line_request req = {.num_lines = 1, .config = config};
     req.offsets[0] = offsets[i];
     strcpy(req.consumer, "wiringpi-h618");
-    if (ioctl(chip, GPIO_V2_GET_LINE_IOCTL, &req) < 0) return -1;
+    if (ioctl(lineChip(i), GPIO_V2_GET_LINE_IOCTL, &req) < 0) return -1;
     fds[i] = req.fd;
   }
   lineFlags[i] = flags;
@@ -226,7 +310,7 @@ static int configure(int i, uint64_t flags) {
 int h618PinMode(int pin, int mode) {
   int i = slot(pin), ret = -1;
   if (i < 0) return -1;
-  if (mode == PWM_OUTPUT) return h618PwmStart(pin);
+  if (mode == PWM_OUTPUT) return a733Detected() ? h618Unsupported("use PWM002 on A733") : h618PwmStart(pin);
   if (pin == 267 && mode == PM_OFF && h618PwmClose() < 0) return -1;
   if (h618PwmMode(pin)) { errno = EBUSY; return -1; }
   if (mode != INPUT && mode != OUTPUT && mode != PM_OFF)
@@ -300,7 +384,7 @@ int h618Info(int native, uint64_t *flags, char *consumer, size_t size) {
   if (chip < 0) errno = ENODEV;
   else {
     struct gpio_v2_line_info info = {.offset = offsets[i]};
-    ret = ioctl(chip, GPIO_V2_GET_LINEINFO_IOCTL, &info);
+    ret = ioctl(lineChip(i), GPIO_V2_GET_LINEINFO_IOCTL, &info);
     if (!ret) {
       *flags = info.flags;
       if (size) snprintf(consumer, size, "%.*s", GPIO_MAX_NAME_SIZE, info.consumer);

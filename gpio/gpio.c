@@ -920,7 +920,7 @@ static void doVersion (char *argv [])
   piBoardId (&model, &rev, &mem, &maker, &warranty) ;
 
   printf ("Hardware details:\n") ;
-  if (model == PI_MODEL_ORANGEPI_ZERO_2W)
+  if (model == PI_MODEL_ORANGEPI_ZERO_2W || model == PI_MODEL_ORANGEPI_ZERO_3W)
     printf ("  Type: %s, Revision: unknown, Memory: unknown, Maker: %s\n",
         piModelNames [model], piMakerNames [maker]) ;
   else
@@ -945,7 +945,7 @@ static void doVersion (char *argv [])
     }
   }
 
-  if (model == PI_MODEL_ORANGEPI_ZERO_2W) {
+  if (model == PI_MODEL_ORANGEPI_ZERO_2W || model == PI_MODEL_ORANGEPI_ZERO_3W) {
     printf ("  * GPIO backend: Linux character-device ABI v2 (/dev/gpiochip*).\n") ;
     printf ("  * Device permissions determine access; no /dev/mem or /dev/gpiomem used.\n") ;
     printf ("  * Run gpio readall to check controller discovery without requesting lines.\n") ;
@@ -1150,7 +1150,7 @@ int main (int argc, char *argv [])
     wpMode = WPI_MODE_PINS ;
   }
 
-  if (h618Detected()) return h618Command(argc, argv, wpMode);
+  if (opiDetected()) return h618Command(argc, argv, wpMode);
 
 // Check for -x argument to load in a new extension
 //	-x extension:base:args

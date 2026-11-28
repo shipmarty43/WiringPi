@@ -4,11 +4,11 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "wiringpi-zero2w"
-version = "0.1.0"
-description = "Physical header GPIO and PWM1 on the Orange Pi Zero 2W"
+version = "0.2.0"
+description = "Physical header GPIO for Orange Pi Zero 2W and Zero 3W, with Zero 2W PWM1"
 readme = "README.md"
 requires-python = ">=3.9"
 license = {file = "COPYING.LESSER"}
 
 [tool.setuptools]
-py-modules = ["wiringpi_zero2w"]
+py-modules = ["wiringpi_zero2w", "wiringpi_zero3w"]

@@ -369,7 +369,7 @@ static void piPlusReadall (int model)
 
 void doReadall (void)
 {
-  if (h618Detected()) { h618Readall(); return; }
+  if (opiDetected()) { h618Readall(); return; }
   int model, rev, mem, maker, overVolted ;
 
   if (wiringPiNodes != NULL)	// External readall
@@ -405,7 +405,7 @@ void doReadall (void)
 
 void doAllReadall (void)
 {
-  if (h618Detected()) { h618Readall(); return; }
+  if (opiDetected()) { h618Readall(); return; }
   allReadall () ;
 }
 

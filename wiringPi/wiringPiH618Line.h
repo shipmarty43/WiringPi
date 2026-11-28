@@ -19,6 +19,10 @@ struct wpi_h618_line_info {
 };
 /* Inspect the kernel line info without requesting the line or reading its level. */
 int wiringPiH618LineInfo(int physical, struct wpi_h618_line_info *info);
+/* A733 requests use physical header numbering and the same fd operations and event ABI. */
+int wiringPiA733HeaderToNative(int physical);
+int wiringPiA733LineInfo(int physical, struct wpi_h618_line_info *info);
+int wiringPiA733LineRequest(int pin, int direction, int initial, int bias, int edge, uint32_t debounce_us);
 /* Returns an exclusive, caller-owned fd. Release with close(2). Input initial = 0. */
 int wiringPiH618LineRequest(int physical, int direction, int initial, int bias, int edge,
                             uint32_t debounce_us);

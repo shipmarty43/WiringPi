@@ -21,6 +21,10 @@ host-test:
 	  -Dopen=wpi_test_open -Dclose=wpi_test_close -Dioctl=wpi_test_ioctl \
 	  -Dglob=wpi_test_glob -Dglobfree=wpi_test_globfree \
 	  ../wiringPiH618.c ../wiringPiH618Threads.c ../wiringPiH618Pwm.c wiringpi_test_h618_host.c -lpthread -o "$$tmpdir/h618-test"; \
+	$(CC) -g -Wall -Wextra -Werror $(HOST_TEST_SANITIZERS) -I.. \
+	  ../wiringPiH618.c ../wiringPiH618Threads.c ../wiringPiH618Pwm.c ../wiringPiH618Line.c wiringpi_test_a733.c \
+	  -Wl,--wrap=fopen,--wrap=glob,--wrap=globfree,--wrap=open,--wrap=close,--wrap=fstat,--wrap=realpath,--wrap=ioctl \
+	  -lpthread -o "$$tmpdir/a733-test"; "$$tmpdir/a733-test"; \
 	"$$tmpdir/h618-test"; \
 	$(CC) -g -Wall $(HOST_TEST_SANITIZERS) -I.. -D_GNU_SOURCE -DWPI_INTEGRATION \
 	  -Dopen=wpi_test_open -Dclose=wpi_test_close -Dioctl=wpi_test_ioctl \

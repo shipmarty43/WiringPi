@@ -11,7 +11,7 @@
 #include <wiringPiH618.h>
 
 void h618Readall(void) {
-  puts("Orange Pi Zero 2W / H618 — 40-pin header");
+  puts(a733Detected() ? "Orange Pi Zero 3W / A733 — 40-pin header" : "Orange Pi Zero 2W / H618 — 40-pin header");
   puts(" Phys  wPi  sunxi  Name  GPIO state / consumer");
   for (int phys = 1; phys <= 40; ++phys) {
     int native = h618Physical(phys);
@@ -47,7 +47,7 @@ int h618Command(int argc, char **argv, int mode) {
   }
   if (argc < 3) goto usage;
   int pin = h618Map(number(argv[2], INT_MAX), mode), ret = -1;
-  if (pin < 0) { fprintf(stderr, "Invalid H618 header pin\n"); return 1; }
+  if (pin < 0) { fprintf(stderr, "Invalid Orange Pi header pin\n"); return 1; }
   if (!strcmp(argv[1], "read") && argc == 3) {
     ret = h618Read(pin);
     if (ret >= 0) { printf("%d\n", ret); return 0; }

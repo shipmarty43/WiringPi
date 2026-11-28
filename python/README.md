@@ -131,3 +131,18 @@ debounce matters to a peripheral, inject known pulse widths on its input and
 record the filter threshold reported or supported by that kernel/controller.
 After each test reopen the ownership page and verify the test lines are
 released. A read-only inventory can be used with attached peripherals.
+
+### Orange Pi Zero 3W
+
+Import `wiringpi_zero3w` for physical header GPIO. It provides `header_map()`,
+`native_pin()`, `line_info()`, `request_input()` and `request_output()`, including
+edge events and driver-supported bias/debounce. The main PIO and standby R_PIO
+are identified by their OF ancestry. Physical pin 16 is PL2, standby offset 2.
+The existing `wiringpi_zero2w` hardware API continues to check the Zero 2W
+identity. Use the configurator's PWM002 for A733 hardware PWM.
+
+`packaging/orange-gpio.sh HEAD /path/to/output` cross-builds an ARM64 Debian
+package with both Python modules and a private libwiringPi under
+`/usr/lib/wiringpi-orange/`. Its C headers are installed under
+`/usr/include/wiringpi-orange/`. The distribution's gpio command can coexist
+with the package.

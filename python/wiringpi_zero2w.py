@@ -41,7 +41,8 @@ def _checked(result, function, args):
 @lru_cache(maxsize=1)
 def _library():
     try:
-        lib = ct.CDLL("libwiringPi.so", use_errno=True)
+        private = "/usr/lib/wiringpi-orange/libwiringPi.so"
+        lib = ct.CDLL(private if os.path.isfile(private) else "libwiringPi.so", use_errno=True)
     except OSError as exc:
         raise RuntimeError("Install the Zero 2W build of libwiringPi on the loader path") from exc
     i, u = ct.c_int, ct.c_uint
@@ -112,8 +113,10 @@ def _close_fds(fds):
 class Line:
     """A kernel-owned single-line request. Construct with request_input/output."""
 
-    def __init__(self, pin, output, initial, bias, edge, debounce):
-        native_pin(pin)
+    def __init__(self, pin, output, initial, bias, edge, debounce, *, _request=None):
+        _integer(pin, 1, 40, "physical pin")
+        if _request is None:
+            native_pin(pin)
         self._lib = _library()
         self._pid = os.getpid()
         self._lock = threading.Lock()
@@ -121,7 +124,8 @@ class Line:
         self._sequence = 0
         self._edge = edge
         self._cancel = ()
-        self._fd = self._lib.wiringPiH618LineRequest(pin, output, initial, bias, edge, debounce)
+        request = self._lib.wiringPiH618LineRequest if _request is None else _request
+        self._fd = request(pin, output, initial, bias, edge, debounce)
         try:
             if edge:
                 self._cancel = os.pipe2(os.O_CLOEXEC | os.O_NONBLOCK)
@@ -208,12 +212,16 @@ class Line:
 
 def request_input(pin, *, bias=None, edge=None, debounce_us=0):
     """Claim a physical GPIO input. Bias is None, 'off', 'up' or 'down'."""
+    return _input(pin, bias, edge, debounce_us, None)
+
+
+def _input(pin, bias, edge, debounce_us, request):
     biases = (None, "off", "up", "down")
     edges = (None, "rising", "falling", "both")
     debounce = _integer(debounce_us, 0, 0xffffffff, "debounce_us")
     if debounce and edge is None:
         raise ValueError("debounce_us requires edge detection")
-    return Line(pin, 0, 0, biases.index(bias), edges.index(edge), debounce)
+    return Line(pin, 0, 0, biases.index(bias), edges.index(edge), debounce, _request=request)
 
 
 def request_output(pin, *, initial):

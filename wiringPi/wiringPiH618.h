@@ -6,6 +6,10 @@
 /* Internal board backend. Native numbers are sunxi bank * 32 + line. */
 int h618Compatible(const char *data, size_t size);
 int h618Detected(void);
+int a733Detected(void);
+int a733Compatible(const char *data, size_t size);
+int opiPhysical(int pin, int a733);
+#define opiDetected() (h618Detected() || a733Detected())
 int h618Setup(void);
 void h618Close(void);
 int h618Map(int pin, int mode);

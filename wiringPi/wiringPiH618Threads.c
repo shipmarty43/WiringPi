@@ -20,7 +20,7 @@
 #include "wiringPiH618.h"
 
 /* Native offsets, validated against the header map before indexing. */
-#define NATIVE_LIMIT 288
+#define NATIVE_LIMIT 384
 #define IRQ 1
 #define PWM 2
 #define TONE 3
