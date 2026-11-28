@@ -2,7 +2,7 @@
 
 Use the **physical pin** to follow a wire from one board to the other. For example, header pin 32 is PI11 on the Zero 2W (wPi 21, sunxi 267) and PD1 on the Zero 3W (PIO line 97). Both pads can generate PWM, through different controllers.
 
-**Library support.** This fork implements the Zero 2W (H618) GPIO backend and the `wiringpi_zero2w` Python binding. The Zero 3W (A733) columns are a porting reference. Its tested next-boot pin configurations live in the companion Armbian configurator. [H618 API and hardware tests](h618-support.md) · [A733 configurator][a733]
+**Library support.** This fork provides GPIO v2 backends for both headers. Import `wiringpi_zero2w` or `wiringpi_zero3w` to select the board explicitly in Python. On A733, PIO and R_PIO are matched to their device-tree controllers and relative offsets. Use the companion configurator for A733 hardware PWM. [Python interfaces](../../python/README.md)
 
 ## The 40-pin header
 
