@@ -21,7 +21,7 @@ cat > "$root/DEBIAN/control" <<CONTROL
 Package: wiringpi-orange-gpio
 Version: $version
 Architecture: arm64
-Depends: libc6, python3
+Depends: libc6, libcrypt1, libatomic1, python3
 Maintainer: Orange Pi configurator maintainers <shipmarty43@users.noreply.github.com>
 Description: Orange Pi Zero 2W and Zero 3W header GPIO library and Python bindings
 CONTROL
